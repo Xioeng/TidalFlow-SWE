@@ -43,7 +43,6 @@ class WindForcing:
         self.c_d = c_d
         self.rho_air = rho_air
         self.rho_water = rho_water
-        print("gggggg", logger)
         logger.debug(
             f"WindForcing initialized: u={u_wind:.2f} m/s, v={v_wind:.2f} m/s, "
             f"C_D={c_d:.2e}"
@@ -100,44 +99,72 @@ class WindForcing:
         """
         return self.c_d
 
-    def wind_stress(
+    @staticmethod
+    def compute_velocities(
+        h: np.ndarray, hu: np.ndarray, hv: np.ndarray, threshold: float = 1e-6
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """
+        Compute water velocities from momentum and depth arrays.
+
+        Parameters
+        ----------
+        h : np.ndarray
+            Water depth (m)
+        hu : np.ndarray
+            X-momentum (m³/s)
+        hv : np.ndarray
+            Y-momentum (m³/s)
+        threshold : float, default=1e-6
+            Minimum water depth threshold for velocity calculation
+
+        Returns
+        -------
+        u : np.ndarray
+            X-velocity (m/s)
+        v : np.ndarray
+            Y-velocity (m/s)
+        """
+        u = np.zeros_like(h)
+        v = np.zeros_like(h)
+
+        # Avoid division by zero for dry cells
+        mask = h > threshold
+        u[mask] = hu[mask] / h[mask]
+        v[mask] = hv[mask] / h[mask]
+
+        return u, v, mask
+
+    def compute_wind_stress(
         self,
-        h: float,
-        hu: float,
-        hv: float,
-    ) -> tuple[float, float]:
+        h: np.ndarray,
+        u: np.ndarray,
+        v: np.ndarray,
+    ) -> tuple[np.ndarray, np.ndarray]:
         """
         Calculate wind stress on water surface.
 
         Parameters
         ----------
-        h : float
+        h : np.ndarray
             Water depth (m)
-        hu : float
-            X-momentum (m²/s)
-        hv : float
-            Y-momentum (m²/s)
+        u : np.ndarray
+            X-velocity (m/s)
+        v : np.ndarray
+            Y-velocity (m/s)
 
         Returns
         -------
-        tau_x : float
+        tau_x : np.ndarray
             Wind stress in x-direction (m²/s²)
-        tau_y : float
+        tau_y : np.ndarray
             Wind stress in y-direction (m²/s²)
         """
-        if h < 1e-6:
-            return 0.0, 0.0
-
-        # Water velocities
-        u = hu / h
-        v = hv / h
-
         # Relative wind velocity
         u_rel = self.u_wind - u
         v_rel = self.v_wind - v
         wind_speed_rel = np.sqrt(u_rel**2 + v_rel**2)
 
-        # Wind stress: τ = ρ_air * C_D * |U_wind - U_water| * (U_wind - U_water)
+        # Wind stress: τ = (ρ_air/p_water) * C_D * |U_wind - U_water| * (U_wind - U_water)
         tau_x = (self.rho_air / self.rho_water) * self.c_d * wind_speed_rel * u_rel
         tau_y = (self.rho_air / self.rho_water) * self.c_d * wind_speed_rel * v_rel
 
@@ -170,24 +197,10 @@ class WindForcing:
         hu = q[x_momentum, :, :]
         hv = q[y_momentum, :, :]
 
-        # Only apply where water depth is significant
-        mask = h > 1e-6
-
         # Calculate water velocities
-        u = np.zeros_like(h)
-        v = np.zeros_like(h)
-        u[mask] = hu[mask] / h[mask]
-        v[mask] = hv[mask] / h[mask]
+        u, v, mask = self.compute_velocities(h, hu, hv, threshold=1e-6)
 
-        # Relative wind velocity
-        u_rel = self.u_wind - u
-        v_rel = self.v_wind - v
-        wind_speed_rel = np.sqrt(u_rel**2 + v_rel**2)
-
-        # Wind stress
-        tau_x = (self.rho_air / self.rho_water) * self.c_d * wind_speed_rel * u_rel
-        tau_y = (self.rho_air / self.rho_water) * self.c_d * wind_speed_rel * v_rel
-
+        tau_x, tau_y = self.compute_wind_stress(h, u, v)
         # Update momentum where there's water
         q[x_momentum, :, :] += dt * h * tau_x * mask
         q[y_momentum, :, :] += dt * h * tau_y * mask

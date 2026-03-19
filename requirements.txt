@@ -1,0 +1,19 @@
+# Core dependencies
+clawpack>=5.14.0
+numpy>=2.0.0
+pandas>=2.0.0
+scipy>=1.10.0
+matplotlib>=3.8.0
+cartopy>=0.23.0
+xarray>=2024.0.0
+mpi4py>=4.0.0
+pyproj>=3.6.0
+shapely>=2.0.0
+
+# Development dependencies
+pytest>=7.0
+pytest-cov>=4.0
+black>=23.0
+isort>=5.12
+flake8>=6.0
+mypy>=1.0

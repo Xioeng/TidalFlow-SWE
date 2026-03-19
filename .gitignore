@@ -3,3 +3,9 @@ _*
 *.log
 !.gitignore
 *.dat
+envistor_data
+.*
+*.egg-info/
+.eggs/
+build/
+dist/

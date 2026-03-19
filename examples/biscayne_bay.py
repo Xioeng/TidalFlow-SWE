@@ -90,9 +90,9 @@ def test_radial_dam_break() -> None:
     lat_range = (lat_min + offset, lat_max - offset)
 
     # Wind parameters (Hurricane-like conditions)
-    speed_florida = 57  # mph
-    u_wind = (-1 / np.sqrt(2)) * 0.44 * speed_florida  # m/s (convert to m/s)
-    v_wind = (1 / np.sqrt(2)) * 0.44 * speed_florida  # m/s
+    speed_florida = 40  # mph
+    u_wind = (1 / np.sqrt(2)) * 0.44 * speed_florida  # m/s (convert to m/s)
+    v_wind = (-1 / np.sqrt(2)) * 0.44 * speed_florida  # m/s
 
     # Create configuration
     config = swe_simulator.config.SimulationConfig(
@@ -116,8 +116,8 @@ def test_radial_dam_break() -> None:
 
     # Wind parameters (Hurricane-like conditions)
     speed_florida = 57  # mph
-    u_wind = (1 / np.sqrt(2)) * 0.44 * speed_florida  # m/s (convert to m/s)
-    v_wind = (-1 / np.sqrt(2)) * 0.44 * speed_florida  # m/s
+    u_wind = (-1 / np.sqrt(2)) * 0.44 * speed_florida  # m/s (convert to m/s)
+    v_wind = (1 / np.sqrt(2)) * 0.44 * speed_florida  # m/s
 
     # ========================================================================
     # Initialize Solver
@@ -256,12 +256,12 @@ def test_radial_dam_break() -> None:
 
 if __name__ == "__main__":
     # Run the main test
-    # u = sim_utils.visualization.animate_solution(
+    # sim_utils.visualization.animate_solution(
     #     output_path="_output",
-    #     frames=range(2000),  # It means all frames
+    #     frames=None,  # It means all frames
     #     wave_treshold=1e-2,
     #     interval=100,
-    #     save=False,
+    #     save=True,
     # )
     test_radial_dam_break()
 

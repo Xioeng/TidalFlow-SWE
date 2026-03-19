@@ -25,13 +25,16 @@ class GeographicCoordinateMapper:
     """
 
     def __init__(self, lon0: float, lat0: float, R: float = 6371000.0) -> None:
-        self.lon0: float = np.deg2rad(lon0)
-        self.lat0: float = np.deg2rad(lat0)
+        self.lon0: float = lon0
+        self.lat0: float = lat0
         self.R: float = R
-        self.cos_lat0: float = np.cos(self.lat0)
+        # Pre-compute radian versions for conversion methods
+        self._lon0_rad: float = np.deg2rad(lon0)
+        self._lat0_rad: float = np.deg2rad(lat0)
+        self.cos_lat0: float = np.cos(self._lat0_rad)
 
         logger.debug(
-            f"Initialized mapper: lon0={np.rad2deg(self.lon0):.4f}°, lat0={np.rad2deg(self.lat0):.4f}°"
+            f"Initialized mapper: lon0={self.lon0:.4f}°, lat0={self.lat0:.4f}°"
         )
 
     def coord_to_metric(
@@ -61,8 +64,8 @@ class GeographicCoordinateMapper:
         lon_rad = np.deg2rad(lon)
         lat_rad = np.deg2rad(lat)
 
-        x = self.R * (lon_rad - self.lon0) * self.cos_lat0
-        y = self.R * (lat_rad - self.lat0)
+        x = self.R * (lon_rad - self._lon0_rad) * self.cos_lat0
+        y = self.R * (lat_rad - self._lat0_rad)
 
         return x, y
 
@@ -90,10 +93,8 @@ class GeographicCoordinateMapper:
         lat : float or np.ndarray
             Latitude(s) in degrees
         """
-        lon_rad = self.lon0 + x / (self.R * self.cos_lat0)
-        lat_rad = self.lat0 + y / self.R
-
+        lon_rad = self._lon0_rad + x / (self.R * self.cos_lat0)
+        lat_rad = self._lat0_rad + y / self.R
         lon = np.rad2deg(lon_rad)
         lat = np.rad2deg(lat_rad)
-
         return lon, lat
