@@ -1,11 +1,9 @@
-from typing import Tuple
-
 import numpy as np
 
 
 def generate_cell_centers(
     x_lower: float, x_upper: float, y_lower: float, y_upper: float, nx: int, ny: int
-) -> Tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray]:
     """
     Generate cell center coordinates for a 2D grid.
 
@@ -29,5 +27,7 @@ def generate_cell_centers(
     x_centers = x_lower + (np.arange(nx) + 0.5) * dx
     y_centers = y_lower + (np.arange(ny) + 0.5) * dy
 
-    X, Y = np.meshgrid(x_centers, y_centers)
+    X, Y = np.meshgrid(
+        x_centers, y_centers, indexing="ij"
+    )  # We want 'ij' for (nx, ny) shape for pyclaw compatibility
     return X, Y

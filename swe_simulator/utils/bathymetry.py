@@ -8,7 +8,6 @@ This module provides functions for:
 """
 
 from pathlib import Path
-from typing import Dict, Optional, Union
 
 import numpy as np
 import numpy.typing as npt
@@ -19,7 +18,7 @@ from ..logging_config import get_logger
 logger = get_logger(__name__)
 
 
-def load_gebco_data(nc_path: Union[str, Path]) -> Dict[str, npt.NDArray[np.float64]]:
+def load_gebco_data(nc_path: str | Path) -> dict[str, npt.NDArray[np.float64]]:
     """
     Load GEBCO netCDF bathymetry data.
 
@@ -134,7 +133,7 @@ def load_gebco_data(nc_path: Union[str, Path]) -> Dict[str, npt.NDArray[np.float
 
 
 def build_gebco_interpolator(
-    nc_path: Union[str, Path],
+    nc_path: str | Path,
     method: str = "linear",
 ) -> RegularGridInterpolator:
     """
@@ -213,9 +212,9 @@ def build_gebco_interpolator(
 def interpolate_gebco_on_grid(
     X: npt.NDArray[np.float64],
     Y: npt.NDArray[np.float64],
-    nc_path: Union[str, Path],
-    method: str = "linear",
-    fill_nan_with: Optional[float] = None,
+    nc_path: str | Path,
+    method: str = "cubic",
+    fill_nan_with: float | None = None,
 ) -> npt.NDArray[np.float64]:
     """
     Interpolate GEBCO bathymetry data onto a 2D grid.
@@ -231,7 +230,7 @@ def interpolate_gebco_on_grid(
         2D array of latitude coordinates (degrees)
     nc_path : str or Path
         Path to GEBCO NetCDF file
-    method : str, default='linear'
+    method : str, default='cubic'
         Interpolation method: 'linear', 'nearest', or 'cubic'
     fill_nan_with : float, optional
         Value to replace NaN values with. If None, NaNs are preserved.
@@ -269,7 +268,7 @@ def interpolate_gebco_on_grid(
     points = np.column_stack([Y.ravel(), X.ravel()])
 
     # Interpolate
-    bathymetry = interpolator(points).reshape(X.shape)
+    bathymetry: npt.NDArray[np.float64] = interpolator(points).reshape(X.shape)
 
     # Count NaN values
     n_nan = np.sum(np.isnan(bathymetry))

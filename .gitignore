@@ -9,3 +9,4 @@ envistor_data
 .eggs/
 build/
 dist/
+output*

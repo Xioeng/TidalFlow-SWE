@@ -3,7 +3,7 @@
 import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Dict, Tuple
+from typing import Any
 
 import clawpack.petclaw as pyclaw
 
@@ -19,9 +19,9 @@ class SimulationConfig:
 
     Parameters
     ----------
-    lon_range : Tuple[float, float], optional
+    lon_range : tuple[float, float], optional
         Longitude range in degrees (lon_min, lon_max)
-    lat_range : Tuple[float, float], optional
+    lat_range : tuple[float, float], optional
         Latitude range in degrees (lat_min, lat_max)
     nx : int, optional
         Number of grid cells in x-direction
@@ -52,8 +52,8 @@ class SimulationConfig:
     """
 
     # Domain parameters
-    lon_range: Tuple[float, float] = None
-    lat_range: Tuple[float, float] = None
+    lon_range: tuple[float, float] | None = None
+    lat_range: tuple[float, float] | None = None
     nx: int = 100
     ny: int = 100
 
@@ -74,8 +74,14 @@ class SimulationConfig:
     cfl_max: float = 1.0
 
     # Boundary conditions
-    bc_lower: Tuple[pyclaw.BC, pyclaw.BC] = (pyclaw.BC.wall, pyclaw.BC.wall)
-    bc_upper: Tuple[pyclaw.BC, pyclaw.BC] = (pyclaw.BC.wall, pyclaw.BC.wall)
+    bc_lower: tuple[pyclaw.BC, pyclaw.BC] = (
+        pyclaw.BC.wall,
+        pyclaw.BC.wall,
+    )
+    bc_upper: tuple[pyclaw.BC, pyclaw.BC] = (
+        pyclaw.BC.wall,
+        pyclaw.BC.wall,
+    )
 
     def __post_init__(self) -> None:
         """Post-initialization processing."""
@@ -145,11 +151,11 @@ class SimulationConfig:
 
         logger.debug("Configuration validation passed")
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert configuration to dictionary."""
         return asdict(self)
 
-    def save(self, filepath: str) -> None:
+    def save(self, filepath: str | Path) -> None:
         """
         Save configuration to JSON file.
 
@@ -167,7 +173,7 @@ class SimulationConfig:
         logger.info(f"Configuration saved to {filepath}")
 
     @classmethod
-    def load(cls, filepath: str) -> "SimulationConfig":
+    def load(cls, filepath: str | Path) -> "SimulationConfig":
         """
         Load configuration from JSON file.
 

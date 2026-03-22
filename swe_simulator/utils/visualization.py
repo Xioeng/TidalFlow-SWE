@@ -1,5 +1,4 @@
 import os
-from typing import List, Tuple
 
 import cartopy.crs as ccrs
 import cartopy.io.img_tiles as cimgt
@@ -16,7 +15,7 @@ logger = get_logger(__name__)
 
 def normalize_velocities_for_plotting(
     v_x: np.ndarray, v_y: np.ndarray, max_arrow_length: float
-) -> Tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray]:
     """Normalize velocity vectors to limit maximum arrow length."""
     velocity_magnitude = np.sqrt(v_x**2 + v_y**2)
     scale = np.ones_like(velocity_magnitude)
@@ -27,7 +26,7 @@ def normalize_velocities_for_plotting(
     return v_x_scaled, v_y_scaled
 
 
-def initialize_plot(output_path: str, **kargs) -> Tuple[plt.Figure, plt.Axes]:
+def initialize_plot(output_path: str, **kargs) -> tuple[plt.Figure, plt.Axes]:
     """Initialize a Matplotlib plot with Cartopy for Clawpack output.
 
     Parameters
@@ -37,7 +36,7 @@ def initialize_plot(output_path: str, **kargs) -> Tuple[plt.Figure, plt.Axes]:
 
     Returns
     -------
-    Tuple[plt.Figure, plt.Axes]
+    tuple[plt.Figure, plt.Axes]
         Matplotlib figure and axes objects.
     """
 
@@ -142,14 +141,14 @@ def plot_solution(output_path: str, frame: int = 0, **kargs) -> None:
     plt.show()
 
 
-def animate_solution(output_path: str, frames: List[int] | None, **kargs) -> None:
+def animate_solution(output_path: str, frames: list[int] | None, **kargs) -> None:
     """Create an animation of solutions over multiple frames from Clawpack output.
 
     Parameters
     ----------
     output_path : str
         Path to the Clawpack output directory.
-    frames : List[int]
+    frames : list[int]
         List of frame numbers to animate.
     **kargs : dict
         Additional keyword arguments for plotting.

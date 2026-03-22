@@ -1,7 +1,5 @@
 """Coordinate mapping between geographic and metric coordinates."""
 
-from typing import Union
-
 import numpy as np
 import numpy.typing as npt
 
@@ -39,10 +37,11 @@ class GeographicCoordinateMapper:
 
     def coord_to_metric(
         self,
-        lon: Union[float, npt.NDArray[np.float64]],
-        lat: Union[float, npt.NDArray[np.float64]],
+        lon: float | npt.NDArray[np.float64],
+        lat: float | npt.NDArray[np.float64],
     ) -> tuple[
-        Union[float, npt.NDArray[np.float64]], Union[float, npt.NDArray[np.float64]]
+        float | npt.NDArray[np.float64],
+        float | npt.NDArray[np.float64],
     ]:
         """
         Convert (lon, lat) in degrees to (x, y) in meters.
@@ -71,10 +70,11 @@ class GeographicCoordinateMapper:
 
     def metric_to_coord(
         self,
-        x: Union[float, npt.NDArray[np.float64]],
-        y: Union[float, npt.NDArray[np.float64]],
+        x: float | npt.NDArray[np.float64],
+        y: float | npt.NDArray[np.float64],
     ) -> tuple[
-        Union[float, npt.NDArray[np.float64]], Union[float, npt.NDArray[np.float64]]
+        float | npt.NDArray[np.float64],
+        float | npt.NDArray[np.float64],
     ]:
         """
         Convert (x, y) in meters to (lon, lat) in degrees.

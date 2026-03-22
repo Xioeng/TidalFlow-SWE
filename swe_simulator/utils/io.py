@@ -10,7 +10,7 @@ This module provides functions for:
 
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any
 
 import numpy as np
 import numpy.typing as npt
@@ -21,7 +21,7 @@ from ..result import SWEResult
 logger = get_logger(__name__)
 
 
-def get_frame_count(output_path: Union[str, Path]) -> int:
+def get_frame_count(output_path: str | Path) -> int:
     """
     Count the number of solution frames in an output directory.
 
@@ -62,9 +62,10 @@ def get_frame_count(output_path: Union[str, Path]) -> int:
 
 
 def load_bathymetry_and_meshgrid(
-    output_path: Union[str, Path],
-) -> Tuple[
-    npt.NDArray[np.float64], Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]
+    output_path: str | Path,
+) -> tuple[
+    npt.NDArray[np.float64],
+    tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]],
 ]:
     """
     Load bathymetry and coordinate meshgrid from output directory.
@@ -145,10 +146,10 @@ def load_bathymetry_and_meshgrid(
 
 
 def read_solutions(
-    outdir: Union[str, Path] = "_output",
-    frames_list: Optional[List[int]] = None,
+    outdir: str | Path = "_output",
+    frames_list: list[int] | None = None,
     read_aux: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Read PyClaw solution files from output directory.
 
@@ -159,7 +160,7 @@ def read_solutions(
     ----------
     outdir : str or Path, default="_output"
         Path to output directory containing solution files
-    frames_list : List[int], optional
+    frames_list : list[int], optional
         List of frame numbers to read. If None, reads all available frames.
     read_aux : bool, default=False
         Whether to read auxiliary variables (e.g., bathymetry from each frame)
@@ -282,8 +283,8 @@ def read_solutions(
 
 def save_solution(
     solution: npt.NDArray[np.float64],
-    filename: Union[str, Path],
-    metadata: Optional[Dict[str, Any]] = None,
+    filename: str | Path,
+    metadata: dict[str, Any] | None = None,
     compress: bool = True,
 ) -> None:
     """
@@ -322,7 +323,7 @@ def save_solution(
         raise
 
 
-def load_solution(filename: Union[str, Path]) -> Dict[str, Any]:
+def load_solution(filename: str | Path) -> dict[str, Any]:
     """
     Load solution and metadata from file.
 

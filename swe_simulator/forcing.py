@@ -1,6 +1,7 @@
 """Wind forcing and source terms for shallow water equations."""
 
 import numpy as np
+import numpy.typing as npt
 from clawpack.riemann.shallow_roe_with_efix_2D_constants import (
     depth,
     x_momentum,
@@ -8,6 +9,8 @@ from clawpack.riemann.shallow_roe_with_efix_2D_constants import (
 )
 
 from .logging_config import get_logger
+from .providers.base import WindProvider
+from .providers.wind import ConstantWind
 
 logger = get_logger(__name__)
 
@@ -32,49 +35,34 @@ class WindForcing:
 
     def __init__(
         self,
-        u_wind: float = 0.0,
-        v_wind: float = 0.0,
+        mesgrid_domain: tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]],
         c_d: float = 1.3e-3,
         rho_air: float = 1.2,
         rho_water: float = 1000.0,
+        wind_provider: WindProvider = ConstantWind(),
     ) -> None:
-        self.u_wind = u_wind
-        self.v_wind = v_wind
         self.c_d = c_d
         self.rho_air = rho_air
         self.rho_water = rho_water
+        self.X_coord, self.Y_coord = mesgrid_domain
+        self.wind_provider = wind_provider
+
         logger.debug(
-            f"WindForcing initialized: u={u_wind:.2f} m/s, v={v_wind:.2f} m/s, "
+            f"WindForcing initialized: u={np.mean(self.get_wind()[0]):.2f} m/s,"
+            f"v={np.mean(self.get_wind()[1]):.2f} m/s, "
             f"C_D={c_d:.2e}"
         )
 
-    def set_wind(self, u_wind: float, v_wind: float) -> None:
-        """
-        Set wind velocity components.
-
-        Parameters
-        ----------
-        u_wind : float
-            Wind velocity in x-direction (m/s)
-        v_wind : float
-            Wind velocity in y-direction (m/s)
-        """
-        self.u_wind = u_wind
-        self.v_wind = v_wind
-        logger.info(f"Wind set to: u={u_wind:.2f} m/s, v={v_wind:.2f} m/s")
-
-    def get_wind(self) -> tuple[float, float]:
+    def get_wind(self) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
         """
         Get current wind velocity components.
 
         Returns
         -------
-        u_wind : float
-            Wind velocity in x-direction (m/s)
-        v_wind : float
-            Wind velocity in y-direction (m/s)
+        tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]
+            Current wind velocities in m/s
         """
-        return self.u_wind, self.v_wind
+        return self.wind_provider.get_wind(self.X_coord, self.Y_coord, time=0)
 
     def set_drag_coefficient(self, c_d: float) -> None:
         """
@@ -139,6 +127,8 @@ class WindForcing:
         h: np.ndarray,
         u: np.ndarray,
         v: np.ndarray,
+        u_wind: np.ndarray,
+        v_wind: np.ndarray,
     ) -> tuple[np.ndarray, np.ndarray]:
         """
         Calculate wind stress on water surface.
@@ -160,8 +150,9 @@ class WindForcing:
             Wind stress in y-direction (m²/s²)
         """
         # Relative wind velocity
-        u_rel = self.u_wind - u
-        v_rel = self.v_wind - v
+
+        u_rel = u_wind - u
+        v_rel = v_wind - v
         wind_speed_rel = np.sqrt(u_rel**2 + v_rel**2)
 
         # Wind stress: τ = (ρ_air/p_water) * C_D * |U_wind - U_water| * (U_wind - U_water)
@@ -197,10 +188,14 @@ class WindForcing:
         hu = q[x_momentum, :, :]
         hv = q[y_momentum, :, :]
 
+        u_wind, v_wind = self.wind_provider.get_wind(
+            self.X_coord, self.Y_coord, time=state.t
+        )
+
         # Calculate water velocities
         u, v, mask = self.compute_velocities(h, hu, hv, threshold=1e-6)
 
-        tau_x, tau_y = self.compute_wind_stress(h, u, v)
+        tau_x, tau_y = self.compute_wind_stress(h, u, v, u_wind, v_wind)
         # Update momentum where there's water
         q[x_momentum, :, :] += dt * h * tau_x * mask
         q[y_momentum, :, :] += dt * h * tau_y * mask

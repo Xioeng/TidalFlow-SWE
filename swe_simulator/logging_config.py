@@ -3,13 +3,12 @@
 import logging
 import sys
 from pathlib import Path
-from typing import Optional, Union
 
 
 def setup_logging(
-    level: Union[int, str] = logging.INFO,
-    log_file: Optional[Union[str, Path]] = None,
-    format_string: Optional[str] = None,
+    level: int | str = logging.INFO,
+    log_file: str | Path | None = None,
+    format_string: str | None = None,
 ) -> logging.Logger:
     """
     Set up logging for SWE Simulator.
@@ -79,7 +78,7 @@ def get_logger(name: str) -> logging.Logger:
     return logging.getLogger(name)
 
 
-def set_log_level(level: Union[int, str]) -> None:
+def set_log_level(level: int | str) -> None:
     """
     Change the logging level for all SWE Simulator loggers.
 

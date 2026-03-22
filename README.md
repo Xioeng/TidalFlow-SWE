@@ -54,7 +54,7 @@ import numpy as np
 import swe_simulator
 
 # Create configuration
-config = swe_simulator.SimulationConfig(
+config = swe_simulator.config.SimulationConfig(
     lon_range=(-1.0, 1.0),
     lat_range=(-1.0, 1.0),
     nx=50,
@@ -68,7 +68,7 @@ config = swe_simulator.SimulationConfig(
 )
 
 # Initialize solver
-solver = swe_simulator.SWESolver(config=config)
+solver = swe_simulator.solver.SWESolver(config=config)
 
 # Set flat bathymetry (-10m depth)
 bathymetry = -10.0 * np.ones((config.ny, config.nx))
@@ -99,7 +99,7 @@ import swe_simulator
 import swe_simulator.utils as sim_utils
 
 # Configuration for Florida coast
-config = swe_simulator.SimulationConfig(
+config = swe_simulator.config.SimulationConfig(
     lon_range=(-80.1865, -80.0791),
     lat_range=(25.6678, 25.9137),
     nx=40,
@@ -114,7 +114,7 @@ config = swe_simulator.SimulationConfig(
 )
 
 # Initialize solver
-solver = swe_simulator.SWESolver(config=config)
+solver = swe_simulator.solver.SWESolver(config=config)
 
 # Load GEBCO bathymetry
 bathymetry = sim_utils.interpolate_gebco_on_grid(
@@ -134,7 +134,7 @@ solver.set_initial_condition(initial_condition)
 # Add hurricane wind forcing (57 mph from NE)
 u_wind = -17.8  # m/s
 v_wind = 17.8   # m/s
-solver.set_wind_forcing(u_wind=u_wind, v_wind=v_wind)
+solver.set_constant_wind_forcing(u_wind=u_wind, v_wind=v_wind)
 
 # Run simulation
 solver.setup_solver()
@@ -145,7 +145,7 @@ if solver.rank == 0:
     swe_simulator.utils.animate_solution(
         output_path=config.output_dir,
         frames=None,  # all frames
-        wave_threshold=1e-2,
+        wave_treshold=1e-2,
         interval=100,
         save=False,
     )
@@ -160,7 +160,7 @@ if solver.rank == 0:
 The `SimulationConfig` dataclass centralizes all simulation parameters:
 
 ```python
-config = swe_simulator.SimulationConfig(
+config = swe_simulator.config.SimulationConfig(
     # Domain
     lon_range=(-80.2, -80.0),      # Longitude range (degrees)
     lat_range=(25.6, 25.9),         # Latitude range (degrees)
@@ -195,7 +195,7 @@ config.validate()
 config.save("config.json")
 
 # Load configuration
-config = swe_simulator.SimulationConfig.load("config.json")
+config = swe_simulator.config.SimulationConfig.load("config.json")
 ```
 
 ### Boundary Conditions
@@ -224,12 +224,12 @@ bc_upper=(1, 1)
 Main solver class for running simulations.
 
 ```python
-solver = swe_simulator.SWESolver(config=config)
+solver = swe_simulator.solver.SWESolver(config=config)
 ```
 
 #### Constructor
 
-**`SWESolver(config: Optional[SimulationConfig] = None)`**
+**`SWESolver(config: SimulationConfig | None = None)`**
 
 Initialize the shallow water equation solver.
 
@@ -295,25 +295,24 @@ solver.set_initial_condition(initial_condition)
 
 ---
 
-**`set_wind_forcing(u_wind: float, v_wind: float, c_d: float = 1.3e-3) -> None`**
+**`set_constant_wind_forcing(u_wind: float = 0.0, v_wind: float = 0.0) -> None`**
 
 Add wind stress forcing to the simulation.
 
 **Parameters:**
 - `u_wind` (float): Wind velocity in x-direction (eastward) in m/s
 - `v_wind` (float): Wind velocity in y-direction (northward) in m/s
-- `c_d` (float): Drag coefficient (default: 1.3×10⁻³)
 
 **Example:**
 ```python
 # 10 m/s eastward wind, 5 m/s northward wind
-solver.set_wind_forcing(u_wind=10.0, v_wind=5.0)
+solver.set_constant_wind_forcing(u_wind=10.0, v_wind=5.0)
 
 # Hurricane-force winds from northeast
 speed_mph = 57
 u_wind = (-1/np.sqrt(2)) * 0.44704 * speed_mph  # Convert mph to m/s
 v_wind = (1/np.sqrt(2)) * 0.44704 * speed_mph
-solver.set_wind_forcing(u_wind=u_wind, v_wind=v_wind)
+solver.set_constant_wind_forcing(u_wind=u_wind, v_wind=v_wind)
 ```
 
 ---
@@ -329,12 +328,12 @@ Configure the PyClaw solver with all settings.
 
 ---
 
-**`solve() -> np.ndarray`**
+**`solve() -> SWEResult`**
 
 Run the simulation.
 
 **Returns:**
-- `np.ndarray`: Solution array of shape `(n_frames, 3, ny, nx)` containing water depth, x-momentum, and y-momentum at each output time.
+- `SWEResult`: Result object containing solution frames, grid mesh, bathymetry, initial condition, wind forcing, and config.
 
 **Raises:**
 - `ValueError`: If configuration is incomplete
@@ -342,8 +341,8 @@ Run the simulation.
 **Example:**
 ```python
 solver.setup_solver()
-solutions = solver.solve()
-print(f"Simulation complete! Shape: {solutions.shape}")
+result = solver.solve()
+print(f"Simulation complete! Shape: {result.solution.shape}")
 ```
 
 ---
@@ -376,7 +375,7 @@ import numpy as np
 import swe_simulator
 
 # Configuration
-config = swe_simulator.SimulationConfig(
+config = swe_simulator.config.SimulationConfig(
     lon_range=(-10.0, 10.0),
     lat_range=(-10.0, 10.0),
     nx=100,
@@ -390,7 +389,7 @@ config = swe_simulator.SimulationConfig(
 )
 
 # Initialize solver
-solver = swe_simulator.SWESolver(config=config)
+solver = swe_simulator.solver.SWESolver(config=config)
 
 # Flat bathymetry at -10m
 bathymetry = -10.0 * np.ones((config.ny, config.nx))
@@ -420,7 +419,7 @@ import swe_simulator.utils as sim_utils
 import functools
 
 # Configuration for Miami area
-config = swe_simulator.SimulationConfig(
+config = swe_simulator.config.SimulationConfig(
     lon_range=(-80.1865, -80.0791),
     lat_range=(25.6678, 25.9137),
     nx=40,
@@ -435,7 +434,7 @@ config = swe_simulator.SimulationConfig(
 )
 
 # Initialize solver
-solver = swe_simulator.SWESolver(config=config)
+solver = swe_simulator.solver.SWESolver(config=config)
 
 # Load GEBCO bathymetry
 bathymetry_interpolator = functools.partial(
@@ -456,7 +455,7 @@ solver.set_initial_condition(initial_condition)
 speed_mph = 57
 u_wind = (-1/np.sqrt(2)) * 0.44704 * speed_mph
 v_wind = (1/np.sqrt(2)) * 0.44704 * speed_mph
-solver.set_wind_forcing(u_wind=u_wind, v_wind=v_wind)
+solver.set_constant_wind_forcing(u_wind=u_wind, v_wind=v_wind)
 
 # Run
 solver.setup_solver()
@@ -494,7 +493,7 @@ if solver.rank == 0:
     swe_simulator.utils.animate_solution(
         output_path=config.output_dir,
         frames=None,  # all frames
-        wave_threshold=1e-2,
+        wave_treshold=1e-2,
         interval=100,
         save=False,
     )
@@ -585,7 +584,7 @@ from swe_simulator.utils import animate_solution, plot_solution
 animate_solution(
     output_path="_output",
     frames=None,              # None = all frames, or list of frame numbers
-    wave_threshold=1e-2,      # Minimum depth to display
+    wave_treshold=1e-2,      # Minimum depth to display
     interval=100,             # Milliseconds between frames
     save=False,               # Save to MP4 file
 )
@@ -594,7 +593,7 @@ animate_solution(
 plot_solution(
     output_path="_output",
     frame=10,
-    wave_threshold=1e-2,
+    wave_treshold=1e-2,
 )
 ```
 

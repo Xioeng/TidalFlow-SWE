@@ -2,10 +2,11 @@
 # encoding: utf-8
 
 import os
-from typing import Optional, Tuple
 
 import clawpack.petclaw as pyclaw
 import numpy as np
+import numpy.typing as npt
+from typing import cast
 from clawpack import riemann
 from clawpack.riemann.shallow_roe_with_efix_2D_constants import (
     depth,
@@ -19,6 +20,12 @@ from .config import SimulationConfig
 from .coordinate_mapper import GeographicCoordinateMapper
 from .forcing import WindForcing
 from .logging_config import get_logger
+from .providers import (
+    BathymetryProvider,
+    ConstantWind,
+    InitialConditionProvider,
+    WindProvider,
+)
 from .result import SWEResult
 from .utils.grid import generate_cell_centers
 
@@ -31,18 +38,32 @@ class SWESolver:
 
     Parameters
     ----------
-    multiple_output_times : bool, default=True
-        Whether to output at multiple time steps
+    config : SimulationConfig, optional
+        Simulation configuration
+    ic_provider : InitialConditionProvider, optional
+        Provider for initial conditions. Defaults to FlatInitialCondition.
+    wind_provider : WindProvider, optional
+        Provider for wind forcing. Defaults to ConstantWind().
+    bathymetry_provider : BathymetryProvider, optional
+        Provider for bathymetry. Defaults to FlatBathymetry().
     """
 
     def __init__(
         self,
-        config: Optional[SimulationConfig] = None,
+        config: SimulationConfig | None = None,
+        ic_provider: InitialConditionProvider | None = None,
+        wind_provider: WindProvider = ConstantWind(),
+        bathymetry_provider: BathymetryProvider | None = None,
     ) -> None:
         # Simulation parameters
         self.config = config or SimulationConfig()
-        self.wind_forcing: WindForcing = WindForcing()
-        # Arrays
+
+        # Data providers with sensible defaults
+        self.ic_provider = ic_provider
+        self.wind_provider = wind_provider
+        self.bathymetry_provider = bathymetry_provider
+
+        # Arrays (will be populated from providers or manual setters)
         self.bathymetry_array: np.ndarray = np.zeros((self.config.ny, self.config.nx))
         self.initial_condition_array: np.ndarray = np.zeros(
             (3, self.config.ny, self.config.nx)
@@ -77,8 +98,8 @@ class SWESolver:
 
     def set_domain(
         self,
-        lon_range: Tuple[float, float],
-        lat_range: Tuple[float, float],
+        lon_range: tuple[float, float],
+        lat_range: tuple[float, float],
         nx: int,
         ny: int,
     ) -> None:
@@ -87,9 +108,9 @@ class SWESolver:
 
         Parameters
         ----------
-        lon_range : Tuple[float, float]
+        lon_range : tuple[float, float]
             (min_lon, max_lon) in degrees
-        lat_range : Tuple[float, float]
+        lat_range : tuple[float, float]
             (min_lat, max_lat) in degrees
         nx, ny : int
             Number of cells in each direction
@@ -118,10 +139,14 @@ class SWESolver:
             self.config.nx,
             self.config.ny,
         )
-        self.X_coord, self.Y_coord = self.mapper.metric_to_coord(self.X, self.Y)
+        lon_lat = self.mapper.metric_to_coord(self.X, self.Y)
+        self.X_coord, self.Y_coord = cast(
+            tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]],
+            lon_lat,
+        )
 
     def _check_arrays_sanity_set(
-        self, array: np.ndarray, expected_shape: Tuple[int, ...], name: str
+        self, array: np.ndarray, expected_shape: tuple[int, ...], name: str
     ) -> list:
         errors = []
         if array is None:
@@ -134,6 +159,34 @@ class SWESolver:
             )
         return errors
 
+    def initialize_data_from_providers(self) -> None:
+        """
+        Generate arrays from configured providers.
+
+        This method populates bathymetry and initial condition arrays
+        using the current providers. Requires domain to be set first.
+        """
+        if not hasattr(self, "X_coord") or not hasattr(self, "Y_coord"):
+            raise RuntimeError(
+                "Domain must be set before initializing arrays from providers. "
+                "Call set_domain() first."
+            )
+
+        logger.info("Initializing arrays from providers")
+        if self.bathymetry_provider is not None:
+            self.bathymetry_array = self.bathymetry_provider.get_bathymetry(
+                self.X_coord, self.Y_coord
+            )
+        if self.ic_provider is not None:
+            self.initial_condition_array = self.ic_provider.get_initial_condition(
+                self.X_coord, self.Y_coord
+            )
+
+        self.wind_forcing = WindForcing(
+            mesgrid_domain=(self.X_coord, self.Y_coord),
+            wind_provider=self.wind_provider,
+        )
+
     def set_bathymetry(self, bathymetry_array: np.ndarray) -> None:
         """
         Set the bathymetry for the domain.
@@ -142,8 +195,13 @@ class SWESolver:
         ----------
         bathymetry_array : np.ndarray
             Array of shape (ny, nx) with bathymetry values
+
+        Notes
+        -----
+        Setting bathymetry directly will override any bathymetry provider.
         """
         self.bathymetry_array = bathymetry_array
+        self.bathymetry_provider = None
 
     def set_initial_condition(self, initial_condition: np.ndarray) -> None:
         """
@@ -153,33 +211,37 @@ class SWESolver:
         ----------
         initial_condition : np.ndarray
             Array of shape (3, ny, nx) with [h, hu, hv]
+
+        Notes
+        -----
+        Setting initial condition directly will override any IC provider.
         """
         self.initial_condition_array = initial_condition
+        self.ic_provider = None
 
     def set_boundary_conditions(
-        self, lower: Tuple[int, int], upper: Tuple[int, int]
+        self, lower: tuple[int, int], upper: tuple[int, int]
     ) -> None:
         """
         Set boundary conditions.
 
         Parameters
         ----------
-        lower : Tuple[int, int]
+        lower : tuple[int, int]
             BCs for x-lower and y-lower [x_lo, y_lo]
-        upper : Tuple[int, int]
+        upper : tuple[int, int]
             BCs for x-upper and y-upper [x_hi, y_hi]
         """
         self.config.bc_lower = lower
         self.config.bc_upper = upper
 
-    def set_wind_forcing(
+    def set_constant_wind_forcing(
         self,
         u_wind: float = 0.0,
         v_wind: float = 0.0,
-        c_d: float = 1.3e-3,
     ) -> None:
         """
-        Set wind forcing parameters.
+        Set wind forcing parameters (legacy method).
 
         Parameters
         ----------
@@ -187,10 +249,16 @@ class SWESolver:
             Wind velocity in x-direction (m/s)
         v_wind : float, default=0.0
             Wind velocity in y-direction (m/s)
-        c_d : float, default=1.3e-3
-            Drag coefficient
+
+        Notes
+        -----
+        This method is deprecated. Use set_wind_provider() instead.
         """
-        self.wind_forcing = WindForcing(u_wind=u_wind, v_wind=v_wind, c_d=c_d)
+        # So far, construct a constant wind forcing
+        # To Do: extend this to support time-varying or spatially-varying wind
+
+        # Also update provider for consistency
+        self.wind_provider = ConstantWind(u_wind=u_wind, v_wind=v_wind)
 
     def _validate_swe_configuration(self) -> None:
         """Validate that all required configuration has been set."""
@@ -237,6 +305,9 @@ class SWESolver:
         pyclaw.Controller
             Configured PyClaw controller
         """
+        # Generate arrays from providers if not already set manually
+        self.initialize_data_from_providers()
+
         self._validate_swe_configuration()
 
         # Create solver
