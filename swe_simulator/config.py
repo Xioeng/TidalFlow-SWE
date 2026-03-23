@@ -52,8 +52,8 @@ class SimulationConfig:
     """
 
     # Domain parameters
-    lon_range: tuple[float, float] | None = None
-    lat_range: tuple[float, float] | None = None
+    lon_range: tuple[float, float] = (0.0, 1.0)
+    lat_range: tuple[float, float] = (0.0, 1.0)
     nx: int = 100
     ny: int = 100
 

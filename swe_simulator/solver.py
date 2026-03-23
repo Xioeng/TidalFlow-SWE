@@ -2,11 +2,11 @@
 # encoding: utf-8
 
 import os
+from typing import cast
 
 import clawpack.petclaw as pyclaw
 import numpy as np
 import numpy.typing as npt
-from typing import cast
 from clawpack import riemann
 from clawpack.riemann.shallow_roe_with_efix_2D_constants import (
     depth,
@@ -145,8 +145,9 @@ class SWESolver:
             lon_lat,
         )
 
+    @staticmethod
     def _check_arrays_sanity_set(
-        self, array: np.ndarray, expected_shape: tuple[int, ...], name: str
+        array: np.ndarray, expected_shape: tuple[int, ...], name: str
     ) -> list:
         errors = []
         if array is None:
@@ -155,7 +156,8 @@ class SWESolver:
         """Check if a required array has the correct shape."""
         if array.shape != expected_shape:
             errors.append(
-                f"{name} has incorrect shape. Expected {expected_shape}, got {array.shape}."
+                f"{name} has incorrect shape. "
+                f"Expected {expected_shape}, got {array.shape}."
             )
         return errors
 
@@ -296,6 +298,69 @@ class SWESolver:
         state.q[y_momentum, :, :] = self.initial_condition_array[2]
         state.aux[:, :, :] = self.bathymetry_array
 
+    def _create_pyclaw_solver(self) -> pyclaw.ClawSolver2D:
+        """Create and configure the low-level PyClaw solver."""
+        rs = riemann.sw_aug_2D
+        solver = pyclaw.ClawSolver2D(rs)
+        solver.fwave = True
+        return solver
+
+    def _configure_boundary_conditions(self, solver) -> None:
+        """Apply configured physical boundary conditions to the solver."""
+        solver.bc_lower[0] = self.config.bc_lower[0]
+        solver.bc_upper[0] = self.config.bc_upper[0]
+        solver.bc_lower[1] = self.config.bc_lower[1]
+        solver.bc_upper[1] = self.config.bc_upper[1]
+
+    def _configure_aux_boundary_conditions(self, solver) -> None:
+        """Apply default auxiliary boundary conditions to the solver."""
+        solver.aux_bc_lower[0] = pyclaw.BC.extrap
+        solver.aux_bc_upper[0] = pyclaw.BC.extrap
+        solver.aux_bc_lower[1] = pyclaw.BC.extrap
+        solver.aux_bc_upper[1] = pyclaw.BC.extrap
+
+    def _configure_source_terms(self, solver) -> None:
+        """Attach source terms (wind forcing) to the solver when available."""
+        if self.wind_forcing is not None:
+            logger.info("Applying wind forcing to solver")
+            solver.step_source = self.wind_forcing
+            solver.source_split = 2
+
+    def _create_domain(self) -> pyclaw.Domain:
+        """Create the PyClaw computational domain from configured metric bounds."""
+        x = pyclaw.Dimension(*self.x_domain, self.config.nx, name="x")
+        y = pyclaw.Dimension(*self.y_domain, self.config.ny, name="y")
+        return pyclaw.Domain([x, y])
+
+    def _create_state(self, domain) -> pyclaw.State:
+        """Create and initialize the PyClaw state object."""
+        state = pyclaw.State(domain, num_eqn, num_aux=1)
+        state.problem_data["grav"] = self.config.gravity
+        self._initialize_solution_state(state)
+        return state
+
+    def _create_controller(self, solver, state, domain) -> pyclaw.Controller:
+        """Create and configure the high-level PyClaw controller."""
+        claw = pyclaw.Controller()
+        claw.tfinal = self.config.t_final
+        claw.solution = pyclaw.Solution(state, domain)
+
+        if self.config.output_dir:
+            claw.outdir = self.config.output_dir
+        else:
+            claw.output_format = None
+
+        claw.solver = solver
+
+        if self.config.multiple_output_times:
+            claw.num_output_times = int(self.config.t_final / self.config.dt)
+        else:
+            claw.num_output_times = 1
+
+        claw.keep_copy = True
+        claw.verbosity = 3
+        return claw
+
     def setup_solver(self) -> pyclaw.Controller:
         """
         Construct the PyClaw solver, domain, and controller.
@@ -310,60 +375,15 @@ class SWESolver:
 
         self._validate_swe_configuration()
 
-        # Create solver
-        rs = riemann.sw_aug_2D
-        solver = pyclaw.ClawSolver2D(rs)
+        solver = self._create_pyclaw_solver()
+        self._configure_boundary_conditions(solver)
+        self._configure_aux_boundary_conditions(solver)
+        self._configure_source_terms(solver)
 
-        # Boundary conditions
-        solver.bc_lower[0] = self.config.bc_lower[0]
-        solver.bc_upper[0] = self.config.bc_upper[0]
-        solver.bc_lower[1] = self.config.bc_lower[1]
-        solver.bc_upper[1] = self.config.bc_upper[1]
+        domain = self._create_domain()
+        state = self._create_state(domain)
+        claw = self._create_controller(solver, state, domain)
 
-        # Aux BCs
-        solver.aux_bc_lower[0] = pyclaw.BC.extrap
-        solver.aux_bc_upper[0] = pyclaw.BC.extrap
-        solver.aux_bc_lower[1] = pyclaw.BC.extrap
-        solver.aux_bc_upper[1] = pyclaw.BC.extrap
-
-        solver.fwave = True
-
-        # Set wind forcing if configured
-        if self.wind_forcing is not None:
-            logger.info("Applying wind forcing to solver")
-            solver.step_source = self.wind_forcing  # Use the callable instance
-            solver.source_split = 2
-
-        # Define domain
-        x = pyclaw.Dimension(*self.x_domain, self.config.nx, name="x")
-        y = pyclaw.Dimension(*self.y_domain, self.config.ny, name="y")
-        domain = pyclaw.Domain([x, y])
-
-        # Define state
-        state = pyclaw.State(domain, num_eqn, num_aux=1)
-        state.problem_data["grav"] = self.config.gravity
-
-        # Initialize data
-        self._initialize_solution_state(state)
-
-        # Setup controller
-        claw = pyclaw.Controller()
-        claw.tfinal = self.config.t_final
-        claw.solution = pyclaw.Solution(state, domain)
-        if self.config.output_dir:
-            claw.outdir = self.config.output_dir
-        else:
-            claw.output_format = None
-        claw.solver = solver
-
-        # Output times
-        if self.config.multiple_output_times:
-            claw.num_output_times = int(self.config.t_final / self.config.dt)
-        else:
-            claw.num_output_times = 1
-
-        claw.keep_copy = True
-        claw.verbosity = 3
         self.claw = claw
 
         return claw

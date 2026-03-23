@@ -1,7 +1,7 @@
 """Configuration dataclass for SWE Simulator."""
 
 import pickle
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, cast
 
@@ -15,13 +15,19 @@ logger = get_logger(__name__)
 
 @dataclass
 class SWEResult:
-    meshgrid_coord: tuple[np.ndarray | float, np.ndarray | float] | None = None
-    meshgrid_metric: tuple[np.ndarray, np.ndarray] | None = None
-    solution: np.ndarray | None = None
-    bathymetry: np.ndarray | None = None
-    initial_condition: np.ndarray | None = None
-    wind_forcing: tuple[float | np.ndarray, float | np.ndarray] | None = None
-    config: SimulationConfig | None = None
+    meshgrid_coord: tuple[np.ndarray | float, np.ndarray | float] = field(
+        default_factory=lambda: (np.array([]), np.array([]))
+    )
+    meshgrid_metric: tuple[np.ndarray, np.ndarray] = field(
+        default_factory=lambda: (np.array([]), np.array([]))
+    )
+    solution: np.ndarray = field(default_factory=lambda: np.array([]))
+    bathymetry: np.ndarray = field(default_factory=lambda: np.array([]))
+    initial_condition: np.ndarray = field(default_factory=lambda: np.array([]))
+    wind_forcing: tuple[float | np.ndarray, float | np.ndarray] = field(
+        default_factory=lambda: (0.0, 0.0)
+    )
+    config: SimulationConfig = field(default_factory=SimulationConfig)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

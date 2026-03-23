@@ -8,7 +8,7 @@ import numpy as np
 import swe_simulator.utils as sim_utils
 
 
-def animate_surface_from_output(
+def animate_surface(
     output_path: str,
     frames: list[int] | None = None,
     wave_treshold: float = 1e-3,
@@ -94,6 +94,8 @@ def animate_surface_from_output(
         ax.set_zlabel("Surface Elevation (m)")
         ax.set_title(f"Wave surface at frame {frame_idx}")
         ax.view_init(elev=elev, azim=azim)
+        ax.set_xticks([])
+        ax.set_yticks([])
         return (surface,)
 
     ani = animation.FuncAnimation(

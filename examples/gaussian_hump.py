@@ -4,10 +4,8 @@
 
 import clawpack.petclaw as pyclaw
 import numpy as np
-from utils import animate_surface_from_output
 
 import swe_simulator
-from swe_simulator.providers import FlatBathymetry, GaussianHumpInitialConditionNoGeo
 
 
 def test_gaussian_hump() -> None:
@@ -35,11 +33,11 @@ def test_gaussian_hump() -> None:
         # Domain
         lon_range=lon_range,
         lat_range=lat_range,
-        nx=40,
-        ny=40,
+        nx=100,
+        ny=100,
         # Time stepping
         t_final=100.0,  # seconds
-        dt=1,  # seconds
+        dt=0.1,  # seconds
         # Physics
         gravity=9.81,
         # Boundary conditions (wall on all sides)
@@ -55,14 +53,16 @@ def test_gaussian_hump() -> None:
     print("Creating providers...")
 
     # Flat bathymetry at 1m depth
-    bathymetry_provider = FlatBathymetry(depth=-1.0)
+    bathymetry_provider = swe_simulator.providers.FlatBathymetry(depth=-1.0)
 
     # Gaussian hump
-    initial_condition_provider = GaussianHumpInitialConditionNoGeo(
-        bias=0.2,
-        height=3.0,  # 1 meter hump
-        width=100.0,  # width parameter (larger = wider hump)
-        center=(0.25, 0.5),  # Center of the hump in normalized coordinates (0 to 1)
+    initial_condition_provider = (
+        swe_simulator.providers.GaussianHumpInitialConditionNoGeo(
+            bias=0.2,
+            height=3.0,  # 1 meter hump
+            width=100.0,  # width parameter (larger = wider hump)
+            center=(0.25, 0.5),  # Center of the hump in normalized coordinates (0 to 1)
+        )
     )
 
     # Solver setup
@@ -106,12 +106,13 @@ def test_gaussian_hump() -> None:
 
     if solver.rank == 0 and solver.config.output_dir is not None:
         print("\nAnimating results...")
-        animate_surface_from_output(
+        swe_simulator.utils.visualization.animate_surface(
             output_path=solver.config.output_dir,
             frames=None,  # All frames
             wave_treshold=1e-3,
             interval=50,
-            save=False,
+            save=True,
+            dark_mode=True,
         )
         print("Visualization complete!")
 

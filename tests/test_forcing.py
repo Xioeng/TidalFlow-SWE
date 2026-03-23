@@ -4,70 +4,52 @@ import numpy as np
 import pytest
 
 from swe_simulator.forcing import WindForcing
-from swe_simulator.providers import ConstantWind
 
-
-def _build_test_grid(nx: int = 10, ny: int = 10) -> tuple[np.ndarray, np.ndarray]:
-    x = np.linspace(-1.0, 1.0, nx)
-    y = np.linspace(-1.0, 1.0, ny)
-    return np.meshgrid(x, y, indexing="xy")
-
-
-def _make_wind_forcing(
-    u_wind: float = 5.0,
-    v_wind: float = 2.0,
-    c_d: float = 1.3e-3,
-    rho_air: float = 1.2,
-    rho_water: float = 1000.0,
-) -> WindForcing:
-    lon_grid, lat_grid = _build_test_grid()
-    provider = ConstantWind(u_wind=u_wind, v_wind=v_wind)
-    return WindForcing(
-        mesgrid_domain=(lon_grid, lat_grid),
-        c_d=c_d,
-        rho_air=rho_air,
-        rho_water=rho_water,
-        wind_provider=provider,
-    )
+# def _build_test_grid(nx: int = 10, ny: int = 10) -> tuple[np.ndarray, np.ndarray]:
+#     x = np.linspace(-1.0, 1.0, nx)
+#     y = np.linspace(-1.0, 1.0, ny)
+#     return np.meshgrid(x, y, indexing="xy")
 
 
 class TestWindForcing:
     """Test wind forcing initialization and calculations."""
 
-    def test_wind_forcing_initialization(self):
+    def test_wind_forcing_initialization(self, wind_forcing):
         """Test basic initialization."""
-        wind = _make_wind_forcing(u_wind=5.0, v_wind=2.0)
-        u, v = wind.get_wind()
+        u, v = wind_forcing.get_wind()
         assert np.allclose(u, 5.0)
         assert np.allclose(v, 2.0)
 
-    def test_wind_forcing_defaults(self):
+    @pytest.mark.parametrize(
+        "wind_forcing",
+        [{"u_wind": 0.0, "v_wind": 0.0}],
+        indirect=True,
+    )
+    def test_wind_forcing_defaults(self, wind_forcing):
         """Test default values."""
-        wind = _make_wind_forcing(u_wind=0.0, v_wind=0.0)
-        u, v = wind.get_wind()
+        u, v = wind_forcing.get_wind()
         assert np.allclose(u, 0.0)
         assert np.allclose(v, 0.0)
-        assert wind.c_d > 0  # drag coefficient should be positive
-        assert wind.rho_air > 0
-        assert wind.rho_water > 0
+        assert wind_forcing.c_d > 0  # drag coefficient should be positive
+        assert wind_forcing.rho_air > 0
+        assert wind_forcing.rho_water > 0
 
-    def test_wind_forcing_custom_density(self):
+    def test_wind_forcing_custom_density(self, wind_forcing_factory):
         """Test custom density values."""
-        wind = _make_wind_forcing(rho_air=1.3, rho_water=1025.0)
+        wind = wind_forcing_factory(rho_air=1.3, rho_water=1025.0)
         assert wind.rho_air == 1.3
         assert wind.rho_water == 1025.0
 
-    def test_get_wind_velocity(self):
+    def test_get_wind_velocity(self, wind_forcing_factory):
         """Test getting wind velocity."""
-        wind_forcing = _make_wind_forcing(u_wind=5.0, v_wind=0.0)
+        wind_forcing = wind_forcing_factory(u_wind=5.0, v_wind=0.0)
         u, v = wind_forcing.get_wind()
         assert u.shape == v.shape
         assert np.allclose(u, 5.0)
         assert np.allclose(v, 0.0)
 
-    def test_set_drag_coefficient(self):
+    def test_set_drag_coefficient(self, wind_forcing):
         """Test setting drag coefficient."""
-        wind_forcing = _make_wind_forcing()
         wind_forcing.set_drag_coefficient(1.5e-3)
         assert wind_forcing.get_drag_coefficient() == 1.5e-3
 
@@ -126,9 +108,9 @@ class TestWindForcing:
         # Check first element: u = 2/1 = 2
         assert np.isclose(u[0, 0], 2.0)
 
-    def test_compute_wind_stress_magnitude(self):
+    def test_compute_wind_stress_magnitude(self, wind_forcing_factory):
         """Test wind stress computation."""
-        wind_forcing = _make_wind_forcing(u_wind=5.0, v_wind=0.0)
+        wind_forcing = wind_forcing_factory(u_wind=5.0, v_wind=0.0)
         h = np.ones((10, 10)) * 5.0
         u = np.zeros((10, 10))
         v = np.zeros((10, 10))
@@ -140,9 +122,9 @@ class TestWindForcing:
         assert (tau_x >= 0).all()  # u_wind > 0
         assert (tau_y == 0).all()  # v_wind == 0
 
-    def test_compute_wind_stress_zero_wind(self):
+    def test_compute_wind_stress_zero_wind(self, wind_forcing_factory):
         """Test wind stress with zero wind."""
-        wind = _make_wind_forcing(u_wind=0.0, v_wind=0.0)
+        wind = wind_forcing_factory(u_wind=0.0, v_wind=0.0)
         h = np.ones((10, 10)) * 5.0
         u = np.zeros((10, 10))
         v = np.zeros((10, 10))
@@ -154,9 +136,9 @@ class TestWindForcing:
         np.testing.assert_allclose(tau_x, 0.0, atol=1e-10)
         np.testing.assert_allclose(tau_y, 0.0, atol=1e-10)
 
-    def test_compute_wind_stress_opposing_currents(self):
+    def test_compute_wind_stress_opposing_currents(self, wind_forcing_factory):
         """Test wind stress with opposing water currents."""
-        wind_forcing = _make_wind_forcing(u_wind=5.0, v_wind=0.0)
+        wind_forcing = wind_forcing_factory(u_wind=5.0, v_wind=0.0)
         h = np.ones((10, 10)) * 5.0
         u = np.ones((10, 10)) * (-10.0)  # opposite to wind
         v = np.zeros((10, 10))
@@ -177,9 +159,9 @@ class TestWindForcing:
             (-5.0, 5.0),
         ],
     )
-    def test_wind_directions_parametrized(self, u_wind, v_wind):
+    def test_wind_directions_parametrized(self, u_wind, v_wind, wind_forcing_factory):
         """Test wind forcing with various wind directions."""
-        wind = _make_wind_forcing(u_wind=u_wind, v_wind=v_wind)
+        wind = wind_forcing_factory(u_wind=u_wind, v_wind=v_wind)
         h = np.ones((10, 10)) * 5.0
         u = np.zeros((10, 10))
         v = np.zeros((10, 10))

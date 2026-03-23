@@ -16,8 +16,24 @@ A Python-based 2D Shallow Water Equations (SWE) solver using [PyClaw](http://www
 
 ---
 
+## Simulation Demos
+
+See example outputs before diving into implementation details.
+
+### Gaussian Hump
+
+<video src="docs/assets/videos/gaussian_hump.mp4" controls width="900"></video>
+
+### Biscayne Bay Storm Surge
+
+<video src="docs/assets/videos/biscayne_bay.mp4" controls width="900"></video>
+
+---
+
 ## Table of Contents
 
+- [Simulation Demos](#simulation-demos)
+- [Documentation](#documentation)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Configuration](#configuration)
@@ -32,15 +48,48 @@ A Python-based 2D Shallow Water Equations (SWE) solver using [PyClaw](http://www
 
 ---
 
+## Documentation
+
+- [Docs Home](docs/index.md)
+- [Getting Started](docs/getting-started.md)
+- [Examples](docs/examples.md)
+- [Providers](docs/classes/providers.md)
+- [SWESolver](docs/classes/swe_solver.md)
+- [SimulationConfig](docs/classes/simulation_config.md)
+- [WindForcing](docs/classes/wind_forcing.md)
+- [SWEResult](docs/classes/swe_result.md)
+- [Video Demos](docs/assets/videos/README.md)
+
+---
+
 ## Installation
 
+Install `swe_simulator` as a Python package (recommended), so imports like
+`import swe_simulator` work consistently across scripts, notebooks, and tests.
 
-### Install from source
+### 1) Create and activate conda environment
+
+```bash
+conda env create -f environment.yml
+conda activate swe_simulator
+```
+
+### 2) Install from source
 
 ```bash
 git clone https://github.com/yourusername/swe_simulator.git
 cd swe_simulator
-pip install -r requirements.txt .
+pip install -r requirements.txt
+pip install .
+```
+
+### 3) Development install (editable, optional)
+
+Use editable mode while developing the package:
+
+```bash
+pip install -r requirements.txt
+pip install -e .
 ```
 
 ---

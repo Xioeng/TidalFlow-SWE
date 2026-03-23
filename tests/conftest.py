@@ -6,6 +6,7 @@ import pytest
 from swe_simulator.config import SimulationConfig
 from swe_simulator.coordinate_mapper import GeographicCoordinateMapper
 from swe_simulator.forcing import WindForcing
+from swe_simulator.providers import ConstantWind
 
 
 @pytest.fixture
@@ -14,7 +15,7 @@ def basic_config():
     return SimulationConfig(
         lon_range=(-1.0, 1.0),
         lat_range=(-1.0, 1.0),
-        nx=50,
+        nx=40,
         ny=50,
         t_final=10.0,
         dt=0.1,
@@ -47,17 +48,6 @@ def coordinate_mapper():
 
 
 @pytest.fixture
-def wind_forcing():
-    """Create a wind forcing object."""
-    lon_grid, lat_grid = np.meshgrid(
-        np.linspace(-1.0, 1.0, 10),
-        np.linspace(-1.0, 1.0, 10),
-        indexing="ij",
-    )
-    return WindForcing(mesgrid_domain=(lon_grid, lat_grid))
-
-
-@pytest.fixture
 def simple_domain():
     max_lon = 0.0005  # half-width in longitude (degrees)
     max_lat = 0.0005  # half-width in latitude (degrees)
@@ -65,7 +55,40 @@ def simple_domain():
     lon_range = (-max_lon, max_lon)
     lat_range = (-max_lat, max_lat)
     return np.meshgrid(
-        np.linspace(lon_range[0], lon_range[1], 40),
-        np.linspace(lat_range[0], lat_range[1], 40),
+        np.linspace(lon_range[0], lon_range[1], 10),
+        np.linspace(lat_range[0], lat_range[1], 10),
         indexing="ij",
     )
+
+
+@pytest.fixture
+def wind_forcing_factory(simple_domain):
+    """Create a WindForcing factory with optional per-test overrides."""
+
+    def _build(
+        u_wind: float = 5.0,
+        v_wind: float = 2.0,
+        c_d: float = 1.3e-3,
+        rho_air: float = 1.2,
+        rho_water: float = 1000.0,
+    ) -> WindForcing:
+        provider = ConstantWind(u_wind=u_wind, v_wind=v_wind)
+        return WindForcing(
+            mesgrid_domain=simple_domain,
+            c_d=c_d,
+            rho_air=rho_air,
+            rho_water=rho_water,
+            wind_provider=provider,
+        )
+
+    return _build
+
+
+@pytest.fixture
+def wind_forcing(request, wind_forcing_factory):
+    """Create a wind forcing object.
+
+    Supports indirect parametrization via ``request.param``.
+    """
+    params = getattr(request, "param", {})
+    return wind_forcing_factory(**params)

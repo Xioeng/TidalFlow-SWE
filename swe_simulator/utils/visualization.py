@@ -1,4 +1,5 @@
 import os
+from typing import Any, cast
 
 import cartopy.crs as ccrs
 import cartopy.io.img_tiles as cimgt
@@ -26,7 +27,11 @@ def normalize_velocities_for_plotting(
     return v_x_scaled, v_y_scaled
 
 
-def initialize_plot(output_path: str, **kargs) -> tuple[plt.Figure, plt.Axes]:
+def initialize_plot(
+    output_path: str,
+    projection: str = "map",
+    **kargs,
+) -> tuple[plt.Figure, Any]:
     """Initialize a Matplotlib plot with Cartopy for Clawpack output.
 
     Parameters
@@ -41,19 +46,29 @@ def initialize_plot(output_path: str, **kargs) -> tuple[plt.Figure, plt.Axes]:
     """
 
     result = SWEResult().load(os.path.join(output_path, "result.pkl"))
-    X, Y = result.meshgrid_coord
-    if kargs.get("dark", False):
+    X_raw, Y_raw = result.meshgrid_coord
+    X = np.asarray(X_raw)
+    Y = np.asarray(Y_raw)
+    if X is None or Y is None:
+        raise ValueError("Result file does not contain meshgrid coordinates.")
+
+    if kargs.get("dark_mode", False):
         plt.style.use("dark_background")
-    fig = plt.figure(figsize=(8, 14))
-    ax = fig.add_subplot(1, 1, 1, projection=ccrs.PlateCarree())
-    ax.set_extent([X.min(), X.max(), Y.min(), Y.max()], crs=ccrs.PlateCarree())
-    # Add satellite imagery using Google Maps tiles
-    google_tiles = cimgt.GoogleTiles(style="street")
-    # ax.add_image(
-    #     google_tiles,
-    #     12,  # zoom level, adjust as needed
-    #     interpolation="bilinear",
-    # )
+
+    if projection == "3d":
+        fig = plt.figure(figsize=(10, 8))
+        ax = fig.add_subplot(1, 1, 1, projection="3d")
+    else:
+        fig = plt.figure(figsize=(8, 14))
+        ax = fig.add_subplot(1, 1, 1, projection=ccrs.PlateCarree())
+        ax.set_extent([X.min(), X.max(), Y.min(), Y.max()], crs=ccrs.PlateCarree())
+        # Add satellite imagery using Google Maps tiles
+        # google_tiles = cimgt.GoogleTiles(style="street")
+        # ax.add_image(
+        #     google_tiles,
+        #     12,  # zoom level, adjust as needed
+        #     interpolation="bilinear",
+        # )
 
     return fig, ax
 
@@ -152,6 +167,8 @@ def animate_solution(output_path: str, frames: list[int] | None, **kargs) -> Non
         List of frame numbers to animate.
     **kargs : dict
         Additional keyword arguments for plotting.
+        Supported options include:
+        - dark_mode (bool): if True, use a dark plot background.
     """
     import matplotlib.animation as animation
 
@@ -159,25 +176,26 @@ def animate_solution(output_path: str, frames: list[int] | None, **kargs) -> Non
     bathymetry = result["bathymetry"]
     X, Y = result["meshgrid"]
     solutions = result["solutions"]
-
-    fig, ax = initialize_plot(output_path)
+    dark_mode = bool(kargs.get("dark_mode", False))
+    fig, ax = initialize_plot(output_path, dark_mode=dark_mode)
+    ax = cast(Any, ax)
 
     wave_treshold = kargs.get("wave_treshold", 1e-2)
     max_arrow_length = kargs.get("max_arrow_length", 0.5)
 
-    contourf = [None]
-    quiver = [None]
-    # colorbars = [None, None]
+    contourf: list[Any | None] = [None]
+    quiver: list[Any | None] = [None]
+    colorbar1: list[Any | None] = [None]
+    colorbar2: list[Any | None] = [None]
+
     divider = make_axes_locatable(ax)
     cax1 = divider.new_horizontal(size="5%", pad=0.05, axes_class=plt.Axes)
     cax2 = divider.new_horizontal(size="5%", pad=0.75, axes_class=plt.Axes)
-    colorbar1 = fig.colorbar(contourf[0], cax=cax1, label="Water Level (m)")
-    colorbar2 = fig.colorbar(quiver[0], cax=cax2, label="Velocity Magnitude (m/s)")
     fig.add_axes(cax1)
     fig.add_axes(cax2)
 
-    def update(frame_idx: int) -> None:
-        nonlocal cax1, cax2, ax, colorbar1, colorbar2
+    def update(frame_idx: int) -> list[Any]:
+        nonlocal cax1, cax2, ax
 
         ax.clear()
         cax1.clear()
@@ -224,12 +242,15 @@ def animate_solution(output_path: str, frames: list[int] | None, **kargs) -> Non
         ax.set_title(f"Wave height at frame {frame_idx}")
         ax.set_xticks(np.linspace(X.min(), X.max(), 4))
         ax.set_yticks(np.linspace(Y.min(), Y.max(), 6))
-        ax.set_facecolor("black")
-        ax.xaxis.label.set_color("white")
-        ax.yaxis.label.set_color("white")
-        ax.title.set_color("white")
-        ax.tick_params(axis="x", colors="white")
-        ax.tick_params(axis="y", colors="white")
+        # if dark_mode:
+        #     ax.set_facecolor("black")
+        # else:
+        #     ax.set_facecolor("white")
+        # ax.xaxis.label.set_color("white")
+        # ax.yaxis.label.set_color("white")
+        # ax.title.set_color("white")
+        # ax.tick_params(axis="x", colors="white")
+        # ax.tick_params(axis="y", colors="white")
         # Update colorbars for the new contour and quiver plots
 
         # Remove previous colorbars if they exist
@@ -239,10 +260,25 @@ def animate_solution(output_path: str, frames: list[int] | None, **kargs) -> Non
         # cax2 = divider.new_horizontal(size="5%", pad=0.65, axes_class=plt.Axes)
         # print(cax1)
         assert contourf[0] is not None and quiver[0] is not None
-        colorbar1 = fig.colorbar(contourf[0], ax=ax, cax=cax1, label="Water Level (m)")
-        colorbar2 = fig.colorbar(
-            quiver[0], ax=ax, cax=cax2, label="Velocity Magnitude (m/s)"
+
+        # if colorbar1[0] is not None:
+        #     colorbar1[0].remove()
+        # if colorbar2[0] is not None:
+        #     colorbar2[0].remove()
+
+        colorbar1[0] = fig.colorbar(
+            contourf[0],
+            ax=ax,
+            cax=cax1,
+            label="Water Level (m)",
         )
+        colorbar2[0] = fig.colorbar(
+            quiver[0],
+            ax=ax,
+            cax=cax2,
+            label="Velocity Magnitude (m/s)",
+        )
+        return [contourf[0], quiver[0]]
 
     ani = animation.FuncAnimation(
         fig, update, frames=solutions.shape[0], interval=kargs.get("interval", 200)
@@ -252,12 +288,130 @@ def animate_solution(output_path: str, frames: list[int] | None, **kargs) -> Non
             os.path.join(output_path, "wave_animation.mp4"),
             writer="ffmpeg",
             dpi=200,
-            fps=40,
+            fps=50,
         )
     else:
         plt.show()
 
     return
+
+
+def animate_surface(
+    output_path: str,
+    frames: list[int] | None = None,
+    wave_treshold: float = 1e-3,
+    interval: int = 50,
+    elev: float = 30.0,
+    azim: float = -120.0,
+    dark_mode: bool = False,
+    save: bool = False,
+) -> None:
+    """Create a 3D surface animation of wave solutions from Clawpack output.
+
+    Parameters
+    ----------
+    output_path : str
+        Path to the Clawpack output directory.
+    frames : list[int] | None
+        List of frame indices to animate, or None for all frames.
+    wave_treshold : float
+        Threshold below which water height is masked (default: 1e-3).
+    interval : int
+        Interval between frames in milliseconds (default: 50).
+    elev : float
+        Camera elevation angle in degrees (default: 30.0).
+    azim : float
+        Camera azimuth angle in degrees (default: -120.0).
+    dark_mode : bool
+        If True, use a dark background style.
+    save : bool
+        If True, save animation as MP4; otherwise display interactively.
+    """
+    import matplotlib.animation as animation
+
+    result = read_solutions(output_path, frames_list=frames)
+    bathymetry = result["bathymetry"]
+    X, Y = result["meshgrid"]
+    solutions = result["solutions"]
+
+    fig, ax = initialize_plot(
+        output_path,
+        projection="3d",
+        dark_mode=dark_mode,
+    )
+    ax = cast(Any, ax)
+    cax = fig.add_axes((0.88, 0.16, 0.03, 0.68))
+    fig.subplots_adjust(right=0.86)
+
+    x_min, x_max = float(np.nanmin(X)), float(np.nanmax(X))
+    y_min, y_max = float(np.nanmin(Y)), float(np.nanmax(Y))
+    z_min = float(np.nanmin(bathymetry))
+    z_max = float(np.nanmax(bathymetry + solutions[:, 0, :, :]))
+
+    colorbar: Any | None = None
+
+    def update(frame_idx: int) -> tuple[Any]:
+        nonlocal colorbar
+        ax.clear()
+        cax.clear()
+
+        sol = solutions[frame_idx]
+        h = sol[0, :, :]
+        free_surface = bathymetry + h
+        free_surface[h < wave_treshold] = np.nan
+
+        surface = ax.plot_surface(
+            X,
+            Y,
+            free_surface,
+            cmap="viridis",
+            linewidth=0,
+            antialiased=False,
+            alpha=0.95,
+            vmin=float(np.nanmin(free_surface)),
+            vmax=float(np.nanmax(free_surface)),
+        )
+
+        ax.plot_surface(
+            X,
+            Y,
+            bathymetry,
+            cmap="terrain",
+            linewidth=0,
+            antialiased=False,
+            alpha=0.8,
+        )
+        colorbar = fig.colorbar(surface, cax=cax, label="Surface Elevation (m)")
+
+        ax.set_xlim(x_min, x_max)
+        ax.set_ylim(y_min, y_max)
+        ax.set_zlim(z_min - 0.1, z_max + 0.1)
+        ax.set_zlabel("Surface Elevation (m)")
+        ax.set_title(f"Wave surface at frame {frame_idx}")
+        ax.view_init(elev=elev, azim=azim)
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+        if dark_mode:
+            ax.set_facecolor("black")
+            ax.xaxis.label.set_color("white")
+            ax.yaxis.label.set_color("white")
+            ax.zaxis.label.set_color("white")
+            ax.title.set_color("white")
+            ax.tick_params(axis="x", colors="white")
+            ax.tick_params(axis="y", colors="white")
+            ax.tick_params(axis="z", colors="white")
+
+        return (surface,)
+
+    ani = animation.FuncAnimation(
+        fig, update, frames=solutions.shape[0], interval=interval
+    )
+
+    if save:
+        ani.save(f"{output_path}/wave_surface_animation.mp4", writer="ffmpeg", dpi=200)
+    else:
+        plt.show()
 
 
 if __name__ == "__main__":

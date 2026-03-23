@@ -8,11 +8,6 @@ import clawpack.petclaw as pyclaw
 import numpy as np
 
 import swe_simulator
-import swe_simulator.utils as sim_utils
-from swe_simulator.providers import (
-    BathymetryFromNC,
-    GaussianHumpInitialCondition,
-)
 
 logger = swe_simulator.logging_config.setup_logging(
     logging.DEBUG,
@@ -40,7 +35,7 @@ def test_radial_dam_break() -> None:
         nx=40,
         ny=40,
         # Time
-        t_final=500.0,  # seconds
+        t_final=1000.0,  # seconds
         dt=1.0,  # seconds
         # Physics
         gravity=9.81,
@@ -62,7 +57,7 @@ def test_radial_dam_break() -> None:
     print("Creating data providers...")
 
     # Bathymetry from GEBCO NetCDF file
-    bathymetry_provider = BathymetryFromNC(
+    bathymetry_provider = swe_simulator.providers.BathymetryFromNC(
         nc_path="data/gebco_2025_n25.9288_s25.6527_w-80.2016_e-80.0642.nc"
     )
 
@@ -73,7 +68,7 @@ def test_radial_dam_break() -> None:
     center_lon = alpha_lon * lon_range[0] + (1 - alpha_lon) * lon_range[1]
     center_lat = alpha_lat * lat_range[0] + (1 - alpha_lat) * lat_range[1]
     print(f"Domain center (lon, lat): ({center_lon:.4f}, {center_lat:.4f})")
-    initial_condition_provider = GaussianHumpInitialCondition(
+    initial_condition_provider = swe_simulator.providers.GaussianHumpInitialCondition(
         height=3,  # meters
         width=10000,  # controls spread in coordinate space (roughly 1 degree ~ 111111 m,
         bias=0.25,  # base water level (tide)
@@ -127,12 +122,13 @@ def test_radial_dam_break() -> None:
     # Visualize results (only on rank 0 for MPI)
 
     if solver.rank == 0 and solver.config.output_dir is not None:
-        sim_utils.visualization.animate_solution(
+        swe_simulator.utils.visualization.animate_solution(
             output_path=solver.config.output_dir,
             frames=None,  # It means all frames
             wave_treshold=1e-2,
-            interval=100,
-            save=False,
+            interval=50,
+            save=True,
+            dark_mode=True,
         )
         print("\nVisualization complete!")
 
