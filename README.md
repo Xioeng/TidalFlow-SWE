@@ -22,43 +22,53 @@ See example outputs before diving into implementation details.
 
 ### Gaussian Hump
 
-<video src="docs/assets/videos/gaussian_hump.mp4" controls width="900"></video>
+<img src="docs/assets/videos/gaussian_hump.gif" width="50%" height="50%"/>
 
 ### Biscayne Bay Storm Surge
 
-<video src="docs/assets/videos/biscayne_bay.mp4" controls width="900"></video>
+<!-- <video src="docs/assets/videos/biscayne_bay.mp4" controls width="900"></video> -->
 
 ---
 
 ## Table of Contents
 
 - [Simulation Demos](#simulation-demos)
-- [Documentation](#documentation)
+- [Documentation Map](#documentation-map)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Configuration](#configuration)
-- [API Reference](#api-reference)
+- [Class Reference](#class-reference)
 - [Complete Examples](#complete-examples)
 - [Output Format](#output-format)
 - [Utilities](#utilities)
 - [Physics](#physics)
 - [Tips and Best Practices](#tips-and-best-practices)
 - [Troubleshooting](#troubleshooting)
+- [Project Structure](#project-structure)
+- [Data Requirements](#data-requirements)
 - [References](#references)
+- [License](#license)
 
 ---
 
-## Documentation
+## Documentation Map
+
+Use this section as the canonical entry point for project documentation.
+
+### Guides
 
 - [Docs Home](docs/index.md)
 - [Getting Started](docs/getting-started.md)
 - [Examples](docs/examples.md)
-- [Providers](docs/classes/providers.md)
-- [SWESolver](docs/classes/swe_solver.md)
+- [Video Demos](docs/assets/videos/README.md)
+
+### Class Reference
+
 - [SimulationConfig](docs/classes/simulation_config.md)
+- [SWESolver](docs/classes/swe_solver.md)
+- [Providers](docs/classes/providers.md)
 - [WindForcing](docs/classes/wind_forcing.md)
 - [SWEResult](docs/classes/swe_result.md)
-- [Video Demos](docs/assets/videos/README.md)
 
 ---
 
@@ -266,152 +276,17 @@ bc_upper=(1, 1)
 
 ---
 
-## API Reference
+## Class Reference
 
-### SWESolver
+Detailed API documentation for each class is maintained under `docs/classes`.
 
-Main solver class for running simulations.
+- [SimulationConfig](docs/classes/simulation_config.md): constructor arguments grouped by domain/time/physics/output/numerics, attributes, validation, persistence methods.
+- [SWESolver](docs/classes/swe_solver.md): constructor arguments, runtime attributes, and end-to-end workflow methods.
+- [Providers](docs/classes/providers.md): base provider interfaces and built-in provider implementations.
+- [WindForcing](docs/classes/wind_forcing.md): source-term initialization arguments, stress formulation helpers, and callable source hook.
+- [SWEResult](docs/classes/swe_result.md): result container fields and serialization methods.
 
-```python
-solver = swe_simulator.solver.SWESolver(config=config)
-```
-
-#### Constructor
-
-**`SWESolver(config: SimulationConfig | None = None)`**
-
-Initialize the shallow water equation solver.
-
-**Parameters:**
-- `config` (SimulationConfig, optional): Configuration object. If None, creates default config.
-
-**Attributes:**
-- `config` (SimulationConfig): Simulation configuration
-- `X_coord`, `Y_coord` (np.ndarray): Geographic coordinate arrays (longitude, latitude)
-- `mapper` (GeographicCoordinateMapper): Coordinate transformation object
-- `rank` (int): MPI rank (0 for serial runs)
-- `bathymetry_array` (np.ndarray): Bathymetry data
-- `initial_condition_array` (np.ndarray): Initial condition data
-
-#### Methods
-
-**`set_bathymetry(bathymetry_array: np.ndarray) -> None`**
-
-Set the bathymetry for the domain.
-
-**Parameters:**
-- `bathymetry_array` (np.ndarray): Array of shape `(ny, nx)` with bathymetry values in meters
-  - **Negative values** represent depth below sea level (e.g., -10 means 10 meters deep)
-  - **Positive values** represent elevation above sea level
-
-**Raises:**
-- `ValueError`: If bathymetry shape doesn't match grid dimensions or contains NaN/Inf
-
-**Example:**
-```python
-# Flat ocean floor at 10 meters depth
-bathymetry = -10.0 * np.ones((solver.config.ny, solver.config.nx))
-solver.set_bathymetry(bathymetry)
-```
-
----
-
-**`set_initial_condition(initial_condition: np.ndarray) -> None`**
-
-Set the initial state of the water.
-
-**Parameters:**
-- `initial_condition` (np.ndarray): 3D array of shape `(3, ny, nx)` containing:
-  - `[0, :, :]`: Water depth `h` in meters
-  - `[1, :, :]`: x-momentum `hu` in m²/s
-  - `[2, :, :]`: y-momentum `hv` in m²/s
-
-**Raises:**
-- `ValueError`: If shape doesn't match expected dimensions, contains NaN/Inf, or has negative depths
-
-**Example:**
-```python
-# Gaussian wave with zero initial momentum
-x, y = solver.mapper.coord_to_metric(solver.X_coord, solver.Y_coord)
-h_init = 2.0 * np.exp(-0.01 * (x**2 + y**2))
-initial_condition = np.stack([
-    h_init,
-    np.zeros_like(h_init),  # hu
-    np.zeros_like(h_init),  # hv
-], axis=0)
-solver.set_initial_condition(initial_condition)
-```
-
----
-
-**`set_constant_wind_forcing(u_wind: float = 0.0, v_wind: float = 0.0) -> None`**
-
-Add wind stress forcing to the simulation.
-
-**Parameters:**
-- `u_wind` (float): Wind velocity in x-direction (eastward) in m/s
-- `v_wind` (float): Wind velocity in y-direction (northward) in m/s
-
-**Example:**
-```python
-# 10 m/s eastward wind, 5 m/s northward wind
-solver.set_constant_wind_forcing(u_wind=10.0, v_wind=5.0)
-
-# Hurricane-force winds from northeast
-speed_mph = 57
-u_wind = (-1/np.sqrt(2)) * 0.44704 * speed_mph  # Convert mph to m/s
-v_wind = (1/np.sqrt(2)) * 0.44704 * speed_mph
-solver.set_constant_wind_forcing(u_wind=u_wind, v_wind=v_wind)
-```
-
----
-
-**`setup_solver() -> None`**
-
-Configure the PyClaw solver with all settings.
-
-**Raises:**
-- `ValueError`: If required configuration is missing
-
-**Note:** Automatically called by `solve()` if not already called.
-
----
-
-**`solve() -> SWEResult`**
-
-Run the simulation.
-
-**Returns:**
-- `SWEResult`: Result object containing solution frames, grid mesh, bathymetry, initial condition, wind forcing, and config.
-
-**Raises:**
-- `ValueError`: If configuration is incomplete
-
-**Example:**
-```python
-solver.setup_solver()
-result = solver.solve()
-print(f"Simulation complete! Shape: {result.solution.shape}")
-```
-
----
-
-#### Properties
-
-**`X_coord`, `Y_coord`**
-- Geographic coordinate arrays (longitude, latitude in degrees)
-- Shape: `(ny, nx)`
-- Available after domain initialization
-
-**`mapper`**
-- `GeographicCoordinateMapper` instance for coordinate transformations
-- Methods:
-  - `coord_to_metric(lon, lat)`: Convert lon/lat to local metric coordinates
-  - `metric_to_coord(x, y)`: Convert metric coordinates to lon/lat
-
-**`rank`**
-- MPI rank (integer)
-- 0 for serial runs or master process in parallel runs
+These pages are the source of truth for API details; this README keeps only high-level usage.
 
 ---
 

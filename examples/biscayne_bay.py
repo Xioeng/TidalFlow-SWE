@@ -129,6 +129,8 @@ def test_radial_dam_break() -> None:
             interval=50,
             save=True,
             dark_mode=True,
+            writer="pillow",
+            file_name="wave_animation.gif",
         )
         print("\nVisualization complete!")
 

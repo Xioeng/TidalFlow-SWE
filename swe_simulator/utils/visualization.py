@@ -156,15 +156,19 @@ def plot_solution(output_path: str, frame: int = 0, **kargs) -> None:
     plt.show()
 
 
-def animate_solution(output_path: str, frames: list[int] | None, **kargs) -> None:
+def animate_solution(
+    output_path: str,
+    frames: list[int] | None = None,
+    **kargs,
+) -> None:
     """Create an animation of solutions over multiple frames from Clawpack output.
 
     Parameters
     ----------
     output_path : str
         Path to the Clawpack output directory.
-    frames : list[int]
-        List of frame numbers to animate.
+    frames : list[int] | None
+        List of frame numbers to animate, or None for all frames.
     **kargs : dict
         Additional keyword arguments for plotting.
         Supported options include:
@@ -281,14 +285,17 @@ def animate_solution(output_path: str, frames: list[int] | None, **kargs) -> Non
         return [contourf[0], quiver[0]]
 
     ani = animation.FuncAnimation(
-        fig, update, frames=solutions.shape[0], interval=kargs.get("interval", 200)
+        fig,
+        update,
+        frames=solutions.shape[0],
+        interval=int(kargs.get("interval", 200)),
     )
     if kargs.get("save", False):
         ani.save(
-            os.path.join(output_path, "wave_animation.mp4"),
-            writer="ffmpeg",
+            os.path.join(output_path, kargs.get("file_name", "wave_animation.mp4")),
+            writer=kargs.get("writer", "ffmpeg"),
             dpi=200,
-            fps=50,
+            fps=int(kargs.get("fps", 50)),
         )
     else:
         plt.show()
@@ -299,12 +306,7 @@ def animate_solution(output_path: str, frames: list[int] | None, **kargs) -> Non
 def animate_surface(
     output_path: str,
     frames: list[int] | None = None,
-    wave_treshold: float = 1e-3,
-    interval: int = 50,
-    elev: float = 30.0,
-    azim: float = -120.0,
-    dark_mode: bool = False,
-    save: bool = False,
+    **kargs,
 ) -> None:
     """Create a 3D surface animation of wave solutions from Clawpack output.
 
@@ -314,18 +316,18 @@ def animate_surface(
         Path to the Clawpack output directory.
     frames : list[int] | None
         List of frame indices to animate, or None for all frames.
-    wave_treshold : float
-        Threshold below which water height is masked (default: 1e-3).
-    interval : int
-        Interval between frames in milliseconds (default: 50).
-    elev : float
-        Camera elevation angle in degrees (default: 30.0).
-    azim : float
-        Camera azimuth angle in degrees (default: -120.0).
-    dark_mode : bool
-        If True, use a dark background style.
-    save : bool
-        If True, save animation as MP4; otherwise display interactively.
+    **kargs : dict
+        Additional keyword arguments for plotting/export.
+        Supported options include:
+        - wave_treshold (float): mask threshold for wet cells (default: 1e-3)
+        - interval (int): animation interval in ms (default: 50)
+        - elev (float): camera elevation in degrees (default: 30.0)
+        - azim (float): camera azimuth in degrees (default: -120.0)
+        - dark_mode (bool): if True, use dark style/background
+        - save (bool): if True, save animation instead of showing it
+        - file_name (str): output filename (default: wave_surface_animation.mp4)
+        - writer (str): animation writer backend (default: ffmpeg)
+        - fps (int): output frame rate when saving (default: 30)
     """
     import matplotlib.animation as animation
 
@@ -333,6 +335,11 @@ def animate_surface(
     bathymetry = result["bathymetry"]
     X, Y = result["meshgrid"]
     solutions = result["solutions"]
+    wave_treshold = float(kargs.get("wave_treshold", 1e-3))
+    interval = int(kargs.get("interval", 50))
+    elev = float(kargs.get("elev", 30.0))
+    azim = float(kargs.get("azim", -120.0))
+    dark_mode = bool(kargs.get("dark_mode", False))
 
     fig, ax = initialize_plot(
         output_path,
@@ -405,11 +412,22 @@ def animate_surface(
         return (surface,)
 
     ani = animation.FuncAnimation(
-        fig, update, frames=solutions.shape[0], interval=interval
+        fig,
+        update,
+        frames=solutions.shape[0],
+        interval=interval,
     )
 
-    if save:
-        ani.save(f"{output_path}/wave_surface_animation.mp4", writer="ffmpeg", dpi=200)
+    if kargs.get("save", False):
+        ani.save(
+            os.path.join(
+                output_path,
+                str(kargs.get("file_name", "wave_surface_animation.mp4")),
+            ),
+            writer=str(kargs.get("writer", "ffmpeg")),
+            dpi=200,
+            fps=int(kargs.get("fps", 30)),
+        )
     else:
         plt.show()
 

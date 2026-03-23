@@ -36,7 +36,7 @@ def test_gaussian_hump() -> None:
         nx=100,
         ny=100,
         # Time stepping
-        t_final=100.0,  # seconds
+        t_final=10.0,  # seconds
         dt=0.1,  # seconds
         # Physics
         gravity=9.81,
@@ -113,6 +113,8 @@ def test_gaussian_hump() -> None:
             interval=50,
             save=True,
             dark_mode=True,
+            file_name="gaussian_hump.gif",
+            writer="pillow",
         )
         print("Visualization complete!")
 

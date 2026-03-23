@@ -1,136 +1,149 @@
 # Providers
 
-Providers are small classes that supply simulation inputs to `SWESolver`.
+Providers are the data interfaces used by `SWESolver` to populate initial conditions, bathymetry, and wind fields.
 
-Instead of hardcoding equations/data loading inside the solver, each concern is
-delegated to a provider:
+## Base Interfaces
 
-- initial condition provider: returns `(h, hu, hv)` at $t=0$
-- bathymetry provider: returns seabed elevation/depth
-- wind provider: returns wind field `(u_wind, v_wind)` (possibly time-dependent)
+### `InitialConditionProvider` (abstract)
 
-This keeps the solver focused on numerics and orchestration.
+- **Method**: `get_initial_condition(lon, lat) -> np.ndarray`
+- **Expected return**: array with shape `(3, ny, nx)` containing `[h, hu, hv]`.
 
-## Why this pattern is useful
+### `BathymetryProvider` (abstract)
 
-- Swap scenarios without changing solver internals
-- Reuse the same solver with synthetic or real datasets
-- Keep classes testable (providers are easy to unit test in isolation)
-- Add new physics/data sources by adding a class, not rewriting solver logic
+- **Method**: `get_bathymetry(lon, lat) -> np.ndarray`
+- **Expected return**: array with shape `(ny, nx)`.
 
-## Provider interfaces
+### `WindProvider` (abstract)
 
-The project uses three abstract interfaces:
+- **Method**: `get_wind(lon, lat, time) -> tuple[np.ndarray, np.ndarray]`
+- **Expected return**: `(u_wind, v_wind)` arrays, each shape `(ny, nx)`.
 
-- `InitialConditionProvider`
-- `BathymetryProvider`
-- `WindProvider`
+## Initial Condition Providers
 
-Any custom provider must implement the corresponding method signature used by
-the solver.
+### `GaussianHumpInitialCondition`
 
-## Built-in providers
+#### Initialization Arguments
 
-### Initial condition providers
+- `height: float = 2.0`
+- `width: float = 0.01`
+- `bias: float = 0.0`
+- `center: tuple[float, float] = (0.0, 0.0)`
+- `water_velocity: tuple[float, float] = (0.0, 0.0)`
 
-- `GaussianHumpInitialCondition`: Gaussian perturbation for wave tests
-- `FlatInitialCondition`: uniform still-water initial state
+#### Attributes
 
-Example:
+- `height`, `width`, `bias`, `center`, `water_velocity`
 
-```python
-from swe_simulator.providers import GaussianHumpInitialCondition
+#### Methods
 
-ic_provider = GaussianHumpInitialCondition(
-	height=2.0,
-	width=0.01,
-	center=(0.0, 0.0),
-	water_velocity=(0.0, 0.0),
-)
-```
+- `get_initial_condition(lon, lat) -> np.ndarray`
 
-### Bathymetry providers
+### `GaussianHumpInitialConditionNoGeo`
 
-- `FlatBathymetry`: constant depth everywhere
-- `SlopingBathymetry`: linear depth variation (useful for coastal tests)
-- `BathymetryFromNC`: interpolates bathymetry from NetCDF (e.g., GEBCO)
+Same constructor signature as `GaussianHumpInitialCondition`, but evaluates the Gaussian on a normalized synthetic mesh instead of geographic coordinates.
 
-Example:
+#### Methods
 
-```python
-from swe_simulator.providers import BathymetryFromNC
+- `get_initial_condition(lon, lat) -> np.ndarray`
 
-bathy_provider = BathymetryFromNC(
-	nc_path="data/gebco_2025_n25.9288_s25.6527_w-80.2016_e-80.0642.nc"
-)
-```
+### `FlatInitialCondition`
 
-### Wind providers
+#### Initialization Arguments
 
-- `ConstantWind`: uniform, time-independent wind field
+- `depth: float = 1.0`
 
-Example:
+#### Attributes
 
-```python
-from swe_simulator.providers import ConstantWind
+- `depth`
 
-wind_provider = ConstantWind(u_wind=5.0, v_wind=2.0)
-```
+#### Methods
 
-## Using providers with `SWESolver`
+- `get_initial_condition(lon, lat) -> np.ndarray`
+
+## Bathymetry Providers
+
+### `FlatBathymetry`
+
+#### Initialization Arguments
+
+- `depth: float = -10.0`
+
+#### Attributes
+
+- `depth`
+
+#### Methods
+
+- `get_bathymetry(lon, lat) -> np.ndarray`
+
+### `SlopingBathymetry`
+
+#### Initialization Arguments
+
+- `depth_min: float = -5.0`
+- `depth_max: float = -20.0`
+
+#### Attributes
+
+- `depth_min`, `depth_max`
+
+#### Methods
+
+- `get_bathymetry(lon, lat) -> np.ndarray`
+
+### `BathymetryFromNC`
+
+#### Initialization Arguments
+
+- `nc_path: str | Path`
+
+#### Attributes
+
+- `nc_path`
+- `bathymetry_interpolator` (partial function around `utils.bathymetry.interpolate_gebco_on_grid`)
+
+#### Methods
+
+- `get_bathymetry(lon, lat) -> np.ndarray`
+
+## Wind Providers
+
+### `ConstantWind`
+
+#### Initialization Arguments
+
+- `u_wind: float = 0.0`
+- `v_wind: float = 0.0`
+
+#### Attributes
+
+- `u_wind`, `v_wind`
+
+#### Methods
+
+- `get_wind(lon, lat, time) -> tuple[np.ndarray, np.ndarray]`
+
+## Example: Wiring Providers into SWESolver
 
 ```python
 from swe_simulator.config import SimulationConfig
 from swe_simulator.providers import (
-	BathymetryFromNC,
-	ConstantWind,
-	GaussianHumpInitialCondition,
+    BathymetryFromNC,
+    ConstantWind,
+    GaussianHumpInitialCondition,
 )
 from swe_simulator.solver import SWESolver
 
-config = SimulationConfig(
-	lon_range=(-80.1865, -80.0791),
-	lat_range=(25.6678, 25.9137),
-	nx=40,
-	ny=40,
-	t_final=1000.0,
-	dt=1.0,
-)
+config = SimulationConfig(nx=40, ny=40, t_final=1000.0, dt=1.0)
 
 solver = SWESolver(
-	config=config,
-	ic_provider=GaussianHumpInitialCondition(height=2.0, width=0.01),
-	bathymetry_provider=BathymetryFromNC(
-		"data/gebco_2025_n25.9288_s25.6527_w-80.2016_e-80.0642.nc"
-	),
-	wind_provider=ConstantWind(u_wind=5.0, v_wind=2.0),
+    config=config,
+    ic_provider=GaussianHumpInitialCondition(height=2.0, width=0.01),
+    bathymetry_provider=BathymetryFromNC("data/your_gebco_file.nc"),
+    wind_provider=ConstantWind(u_wind=5.0, v_wind=2.0),
 )
 
 solver.setup_solver()
 result = solver.solve()
 ```
-
-## Writing a custom provider
-
-If you need custom logic, inherit from the base interface and implement the
-required method.
-
-Example custom wind provider:
-
-```python
-import numpy as np
-from swe_simulator.providers import WindProvider
-
-
-class SinusoidalWind(WindProvider):
-	def __init__(self, amplitude: float = 8.0, period: float = 3600.0):
-		self.amplitude = amplitude
-		self.period = period
-
-	def get_wind(self, lon: np.ndarray, lat: np.ndarray, time: float):
-		u = self.amplitude * np.sin(2 * np.pi * time / self.period)
-		v = 0.0
-		return u * np.ones_like(lon), v * np.ones_like(lat)
-```
-
-Then pass it to `SWESolver(wind_provider=SinusoidalWind(...))`.
