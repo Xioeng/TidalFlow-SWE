@@ -118,7 +118,7 @@ def test_gaussian_hump() -> None:
             frames=None,  # All frames
             wave_treshold=1e-3,
             interval=50,
-            save=True,
+            save=False,
             dark_mode=True,
             file_name="gaussian_hump.gif",
             writer="pillow",

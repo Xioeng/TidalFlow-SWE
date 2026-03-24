@@ -126,7 +126,7 @@ def test_radial_dam_break() -> None:
             output_path=solver.config.output_dir,
             frames=None,  # It means all frames
             wave_treshold=1e-2,
-            save=True,
+            save=False,
             dark_mode=True,
             writer="pillow",
             file_name="biscayne_bay.gif",

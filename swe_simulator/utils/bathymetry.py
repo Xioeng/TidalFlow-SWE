@@ -3,8 +3,8 @@ Bathymetry utilities for working with GEBCO and other bathymetry data.
 
 This module provides functions for:
 - Loading GEBCO NetCDF files
+- Building reusable GEBCO interpolators
 - Interpolating bathymetry onto simulation grids
-- Building reusable interpolators
 """
 
 from pathlib import Path
@@ -14,6 +14,7 @@ import numpy.typing as npt
 from scipy.interpolate import RegularGridInterpolator
 
 from ..logging_config import get_logger
+from . import grid
 
 logger = get_logger(__name__)
 
@@ -79,7 +80,7 @@ def load_gebco_data(nc_path: str | Path) -> dict[str, npt.NDArray[np.float64]]:
         data = {
             "lon": dataset.lon.values,
             "lat": dataset.lat.values,
-            "elevation": dataset.elevation.values,
+            "elevation": dataset.elevation.values.T,  # Transpose to (lon, lat)
         }
 
         logger.info(
@@ -112,7 +113,7 @@ def load_gebco_data(nc_path: str | Path) -> dict[str, npt.NDArray[np.float64]]:
         data = {
             "lon": dataset.variables["lon"][:],
             "lat": dataset.variables["lat"][:],
-            "elevation": dataset.variables["elevation"][:],
+            "elevation": dataset.variables["elevation"][:].T,  # Transpose to (lon, lat)
         }
 
         dataset.close()
@@ -140,7 +141,7 @@ def build_gebco_interpolator(
     Build a 2D interpolator from GEBCO NetCDF data.
 
     This creates a reusable interpolator object that can efficiently
-    interpolate bathymetry values at arbitrary (lat, lon) points.
+    interpolate bathymetry values at arbitrary (lon, lat) points.
 
     Parameters
     ----------
@@ -152,8 +153,8 @@ def build_gebco_interpolator(
     Returns
     -------
     RegularGridInterpolator
-        Interpolator function that takes (lat, lon) points and returns
-        elevation values. Call with: interpolator((lat_points, lon_points))
+        Interpolator function that takes (lon, lat) points and returns
+        elevation values. Call with: interpolator((lon_points, lat_points))
 
     Raises
     ------
@@ -166,44 +167,20 @@ def build_gebco_interpolator(
     -----
     The interpolator is configured to:
     - Return NaN for points outside the data bounds (bounds_error=False)
-    - Handle coordinates in (lat, lon) order
+    - Handle coordinates in (lon, lat) order
     - Use specified interpolation method
     """
-    valid_methods = ["linear", "nearest", "cubic"]
-    if method not in valid_methods:
-        raise ValueError(
-            f"Invalid interpolation method: {method}. Must be one of {valid_methods}"
-        )
-
     logger.debug(f"Building GEBCO interpolator with method='{method}'")
 
     # Load GEBCO data
     gebco_data = load_gebco_data(nc_path)
 
-    lon = gebco_data["lon"]
-    lat = gebco_data["lat"]
-    elevation = gebco_data["elevation"]
-
-    # Ensure latitude is in increasing order (required by RegularGridInterpolator)
-    if lat[1] < lat[0]:
-        logger.debug("Reversing latitude array to ensure increasing order")
-        lat = lat[::-1]
-        elevation = elevation[::-1, :]
-
-    # Create interpolator (lat, lon) -> elevation
-    interpolator = RegularGridInterpolator(
-        (lat, lon),
-        elevation,
+    # Use generic interpolator builder from grid module
+    interpolator = grid.build_regular_grid_interpolator(
+        lon=gebco_data["lon"],
+        lat=gebco_data["lat"],
+        values=gebco_data["elevation"],
         method=method,
-        bounds_error=False,
-        fill_value=np.nan,
-    )
-
-    logger.info(
-        f"Created GEBCO interpolator: "
-        f"lat=[{lat.min():.2f}, {lat.max():.2f}], "
-        f"lon=[{lon.min():.2f}, {lon.max():.2f}], "
-        f"method='{method}'"
     )
 
     return interpolator
@@ -219,8 +196,12 @@ def interpolate_gebco_on_grid(
     """
     Interpolate GEBCO bathymetry data onto a 2D grid.
 
-    This is a convenience function that loads GEBCO data, builds an
-    interpolator, and applies it to the provided coordinate grid.
+    Convenience function that loads GEBCO data, builds an interpolator,
+    and applies it to the provided coordinate grid in one call.
+
+    For repeated interpolations, it is more efficient to build the
+    interpolator once via build_gebco_interpolator() and then call
+    interpolate_on_mesh() multiple times.
 
     Parameters
     ----------
@@ -246,15 +227,15 @@ def interpolate_gebco_on_grid(
     ValueError
         If X and Y have different shapes
 
-    Notes
-    -----
-    - Points outside the GEBCO data bounds will be NaN (unless fill_nan_with is set)
-    - For repeated interpolations on the same GEBCO data, consider using
-      build_gebco_interpolator() once and reusing it for better performance
+    See Also
+    --------
+    build_gebco_interpolator : Build interpolator for reuse on multiple grids
+    grid.interpolate_on_mesh : Apply a pre-built interpolator to a mesh grid
     """
     if X.shape != Y.shape:
         raise ValueError(
-            f"X and Y must have the same shape. Got X.shape={X.shape}, Y.shape={Y.shape}"
+            f"X and Y must have the same shape. "
+            f"Got X.shape={X.shape}, Y.shape={Y.shape}"
         )
 
     logger.debug(
@@ -264,28 +245,12 @@ def interpolate_gebco_on_grid(
     # Build interpolator
     interpolator = build_gebco_interpolator(nc_path, method=method)
 
-    # Prepare points for interpolation (lat, lon) pairs
-    points = np.column_stack([Y.ravel(), X.ravel()])
-
-    # Interpolate
-    bathymetry: npt.NDArray[np.float64] = interpolator(points).reshape(X.shape)
-
-    # Count NaN values
-    n_nan = np.sum(np.isnan(bathymetry))
-    if n_nan > 0:
-        logger.warning(
-            f"Interpolation resulted in {n_nan} NaN values "
-            f"({100 * n_nan / bathymetry.size:.2f}% of grid points)"
-        )
-
-        if fill_nan_with is not None:
-            logger.info(f"Filling NaN values with {fill_nan_with}")
-            bathymetry = np.nan_to_num(bathymetry, nan=fill_nan_with)
-
-    logger.info(
-        f"Interpolated bathymetry: min={np.nanmin(bathymetry):.2f}m, "
-        f"max={np.nanmax(bathymetry):.2f}m, "
-        f"mean={np.nanmean(bathymetry):.2f}m"
+    # Apply to mesh using generic function from grid module
+    bathymetry = grid.interpolate_on_mesh(
+        interpolator,
+        X,
+        Y,
+        fill_nan_with=fill_nan_with,
     )
 
     return bathymetry

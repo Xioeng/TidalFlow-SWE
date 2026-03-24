@@ -5,6 +5,7 @@ from pathlib import Path
 
 import numpy as np
 import numpy.typing as npt
+import pandas as pd
 
 from .. import utils
 from .base import BathymetryProvider
@@ -104,9 +105,9 @@ class BathymetryFromNC(BathymetryProvider):
         """
         self.nc_path = Path(nc_path)
 
-        self.bathymetry_interpolator = functools.partial(
-            utils.bathymetry.interpolate_gebco_on_grid,
+        self.bathymetry_interpolator = utils.bathymetry.build_gebco_interpolator(
             nc_path=self.nc_path,
+            method="cubic",
         )
 
     def get_bathymetry(
@@ -128,6 +129,75 @@ class BathymetryFromNC(BathymetryProvider):
         np.ndarray
             Array of shape (ny, nx) with bathymetry values from file
         """
-        bathymetry_values = self.bathymetry_interpolator(X=lon, Y=lat)
-        bathymetry_values[np.isnan(bathymetry_values)] = 0.0
+        bathymetry_values = utils.grid.interpolate_on_mesh(
+            self.bathymetry_interpolator,
+            lon,
+            lat,
+            fill_nan_with=0.0,
+        )
+        return bathymetry_values
+
+
+class BathymetryFromCSV(BathymetryProvider):
+    """Bathymetry loaded from a CSV file with columns for lon, lat, elevation."""
+
+    def __init__(
+        self,
+        csv_path: str | Path,
+        columns: tuple[str, str, str] = ("lon", "lat", "elevation"),
+        method: str = "linear",
+    ):
+        """
+        Create bathymetry provider from a CSV file.
+
+        Parameters
+        ----------
+        csv_path : str | Path
+            Path to the CSV file containing bathymetry data with columns
+            'lon', 'lat', 'elevation'
+        columns : tuple[str, str, str], default=("lon", "lat", "elevation")
+            Column names for longitude, latitude, and elevation data
+        method : str, default='linear'
+            Interpolation method for scattered data ('linear' or 'nearest').
+        """
+        self.csv_path = Path(csv_path)
+        lon_col, lat_col, elevation_col = columns
+
+        # Read CSV data
+        df = pd.read_csv(self.csv_path)
+        lon_data = df[lon_col].to_numpy(dtype=np.float64)
+        lat_data = df[lat_col].to_numpy(dtype=np.float64)
+        elevation_data = df[elevation_col].to_numpy(dtype=np.float64)
+
+        # Always treat CSV input as unstructured (scattered) triples.
+        self.bathymetry_interpolator = utils.grid.build_scattered_interpolator(
+            lon=lon_data,
+            lat=lat_data,
+            values=elevation_data,
+            method=method,
+            use_nearest_fallback=True,
+        )
+
+    def get_bathymetry(
+        self,
+        lon: npt.NDArray[np.float64],
+        lat: npt.NDArray[np.float64],
+    ) -> npt.NDArray[np.float64]:
+        """Return bathymetry interpolated from CSV file.
+
+        Parameters
+        ----------
+        lon : np.ndarray
+            Longitude meshgrid of shape (ny, nx)
+        lat : np.ndarray
+            Latitude meshgrid of shape (ny, nx)
+
+        Returns
+        -------
+        np.ndarray
+            Array of shape (ny, nx) with bathymetry values from file
+        """
+        bathymetry_values = utils.grid.interpolate_on_mesh(
+            self.bathymetry_interpolator, lon, lat, 0.0
+        )
         return bathymetry_values
