@@ -22,11 +22,11 @@ See example outputs before diving into implementation details.
 
 ### Gaussian Hump
 
-<img src="docs/assets/videos/gaussian_hump.gif" width="50%" height="50%"/>
+<img src="docs/assets/videos/gaussian_hump.gif" width="70%" height="70%"/>
 
 ### Biscayne Bay Storm Surge
 
-<!-- <video src="docs/assets/videos/biscayne_bay.mp4" controls width="900"></video> -->
+<img src="docs/assets/videos/biscayne_bay.gif" width="70%" height="70%"/>
 
 ---
 

@@ -216,7 +216,7 @@ def read_solutions(
             logger.warning("No solution frames found")
             raise FileNotFoundError("No solution frames found in output directory")
         frames_list = list(range(n_frames))
-        logger.info(f"Found {n_frames} frames to read")
+        logger.info(f"Found {n_frames} frames to read {__name__}")
     else:
         logger.info(f"Reading {len(frames_list)} specified frames")
 

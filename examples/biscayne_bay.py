@@ -11,7 +11,7 @@ import swe_simulator
 
 logger = swe_simulator.logging_config.setup_logging(
     logging.DEBUG,
-    "swe_simulation_example.log",
+    "biscayne_bay_example.log",
 )
 
 
@@ -36,7 +36,7 @@ def test_radial_dam_break() -> None:
         ny=40,
         # Time
         t_final=1000.0,  # seconds
-        dt=1.0,  # seconds
+        dt=10.0,  # seconds
         # Physics
         gravity=9.81,
         # Boundary conditions
@@ -126,11 +126,11 @@ def test_radial_dam_break() -> None:
             output_path=solver.config.output_dir,
             frames=None,  # It means all frames
             wave_treshold=1e-2,
-            interval=50,
             save=True,
             dark_mode=True,
             writer="pillow",
-            file_name="wave_animation.gif",
+            file_name="biscayne_bay.gif",
+            fps=25,
         )
         print("\nVisualization complete!")
 

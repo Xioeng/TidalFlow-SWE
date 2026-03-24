@@ -2,10 +2,17 @@
 # encoding: utf-8
 """Simple example: Gaussian hump in flat bathymetry."""
 
+import logging
+
 import clawpack.petclaw as pyclaw
 import numpy as np
 
 import swe_simulator
+
+logger = swe_simulator.logging_config.setup_logging(
+    logging.DEBUG,
+    "gaussian_hump_example.log",
+)
 
 
 def test_gaussian_hump() -> None:
@@ -36,8 +43,8 @@ def test_gaussian_hump() -> None:
         nx=100,
         ny=100,
         # Time stepping
-        t_final=10.0,  # seconds
-        dt=0.1,  # seconds
+        t_final=50.0,  # seconds
+        dt=0.5,  # seconds
         # Physics
         gravity=9.81,
         # Boundary conditions (wall on all sides)
