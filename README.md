@@ -27,12 +27,12 @@ See example outputs before diving into implementation details.
 
 ### Gaussian Hump  
 
-<img src="docs/assets/videos/gaussian_hump.gif" width="auto" height="250"/><img src="docs/assets/videos/gaussian_hump_velocity.gif" width="auto" height="250"/>
+<img src="docs/assets/videos/gaussian_hump.gif" width="auto" height="275"/><img src="docs/assets/videos/gaussian_hump_velocity.gif" width="auto" height="275"/>
 
 
 ### Biscayne Bay Storm Surge
 
-<img src="docs/assets/videos/biscayne_bay.gif" width="auto" height="250"/><img src="docs/assets/videos/biscayne_bay_velocity.gif" width="auto" height="250"/>
+<img src="docs/assets/videos/biscayne_bay.gif" width="auto" height="275"/><img src="docs/assets/videos/biscayne_bay_velocity.gif" width="auto" height="275"/>
 
 
 ## Table of Contents
