@@ -5,19 +5,18 @@
 import logging
 
 import clawpack.petclaw as pyclaw
-import numpy as np
 
 import tidalflow
 
 logger = tidalflow.logging_config.setup_logging(
-    logging.DEBUG,
+    logging.INFO,
     "gaussian_hump_example.log",
 )
 
 
-def test_gaussian_hump() -> None:
+def run_gaussian_hump_example() -> None:
     """
-    Simple test: Gaussian hump in flat bathymetry.
+    Simple example: Gaussian hump in flat bathymetry.
 
     Domain: approximately 100m x 100m (0.0009 degrees x 0.0009 degrees)
     Grid: 100 x 100 cells
@@ -57,76 +56,103 @@ def test_gaussian_hump() -> None:
 
     # Providers
 
-    print("Creating providers...")
+    logger.info("Creating providers...")
 
     # Flat bathymetry at 1m depth
     bathymetry_provider = tidalflow.providers.FlatBathymetry(depth=-1.0)
 
     # Gaussian hump
-    initial_condition_provider = (
-        tidalflow.providers.GaussianHumpInitialConditionNoGeo(
-            bias=0.2,
-            height=3.0,  # 1 meter hump
-            width=100.0,  # width parameter (larger = wider hump)
-            center=(0.25, 0.5),  # Center of the hump in normalized coordinates (0 to 1)
-        )
+    initial_condition_provider = tidalflow.providers.GaussianHumpInitialConditionNoGeo(
+        bias=0.2,
+        height=3.0,  # 1 meter hump
+        width=100.0,  # width parameter (larger = wider hump)
+        center=(0.25, 0.5),  # Center of the hump in normalized coordinates (0 to 1)
     )
 
     # Solver setup
 
-    print("Initializing SWESolver...")
+    logger.info("Initializing SWESolver...")
     solver = tidalflow.solver.SWESolver(
         config=config,
         bathymetry_provider=bathymetry_provider,
         ic_provider=initial_condition_provider,
     )
 
-    print(f"\nConfiguration:\n{solver.config}")
+    logger.info(f"Configuration:\n{solver.config}")
 
-    print("\nInitializing data from providers...")
+    logger.info("Initializing data from providers...")
     solver.initialize_data_from_providers()
 
-    print(
-        f"  Bathymetry: {solver.bathymetry_array.min():.2f}m"
+    logger.info(
+        f"Bathymetry: {solver.bathymetry_array.min():.2f}m"
         f" to {solver.bathymetry_array.max():.2f}m"
     )
-    print(
-        f"  Initial water height: {solver.initial_condition_array[0].min():.2f}m "
+    logger.info(
+        f"Initial water height: {solver.initial_condition_array[0].min():.2f}m "
         f"to {solver.initial_condition_array[0].max():.2f}m"
     )
 
     # Run simulation
 
-    print("\nSetting up solver...")
+    logger.info("Setting up solver...")
     solver.setup_solver()
-    print(f"\n {np.max(solver.X)} {np.min(solver.X)}")
 
-    print("Running simulation...")
+    logger.info("Running simulation...")
     result = solver.solve()
     assert result.solution is not None
 
-    print(f"\nSimulation complete!")
-    print(f"  Solution shape: {result.solution.shape}")
-    print(f"  Number of output frames: {len(result.solution)}")
+    logger.info(f"Simulation complete!")
+    logger.info(f"Solution shape: {result.solution.shape}")
+    logger.info(f"Number of output frames: {len(result.solution)}")
 
     # Visualize results
 
     if solver.rank == 0 and solver.config.output_dir is not None:
-        print("\nAnimating results...")
+        mpl_rc_params = {
+            "text.usetex": False,
+            "font.family": "sans-serif",
+            "font.sans-serif": ["Google Sans", "DejaVu Sans"],
+        }
+        frames = None  # All frames
+        wave_threshold = 1e-3
+        interval = 50
+        save = True
+        dark_mode = True
+        file_name_surface = "gaussian_hump.gif"
+        file_name_velocity = "gaussian_hump_velocity.gif"
+        writer = "pillow"
+        figsize_surface = (8, 6)
+        figsize_velocity = (8, 8)
+        logger.info("Animating results...")
         tidalflow.utils.visualization.animate_surface(
             output_path=solver.config.output_dir,
-            frames=None,  # All frames
-            wave_treshold=1e-3,
-            interval=50,
-            save=False,
-            dark_mode=True,
-            file_name="gaussian_hump.gif",
-            writer="pillow",
+            frames=frames,  # All frames
+            wave_treshold=wave_threshold,
+            interval=interval,
+            save=save,
+            dark_mode=dark_mode,
+            file_name=file_name_surface,
+            writer=writer,
+            figsize=figsize_surface,
+            mpl_rc_params=mpl_rc_params,
         )
-        print("Visualization complete!")
+        tidalflow.utils.visualization.animate_solution(
+            output_path=solver.config.output_dir,
+            frames=frames,  # All frames
+            wave_treshold=wave_threshold,
+            interval=interval,
+            save=save,
+            dark_mode=dark_mode,
+            file_name=file_name_velocity,
+            writer=writer,
+            figsize=figsize_velocity,
+            mpl_rc_params=mpl_rc_params,
+            arrow_step=5,
+        )
+        logger.info("Visualization complete!")
 
-    print("\nTest completed successfully!")
+    logger.info("Example completed successfully!")
 
 
 if __name__ == "__main__":
-    test_gaussian_hump()
+    run_gaussian_hump_example()

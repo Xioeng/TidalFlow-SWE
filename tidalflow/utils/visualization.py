@@ -61,6 +61,8 @@ def initialize_plot(
             (10, 8) for 3d projection, (8, 14) for map projection.
         - dark_mode : bool
             Whether to use dark background style.
+        - ccrs_projection (str): for 3d only, specify ccrs projection type
+            (e.g., 'platecarree', 'mollweide', 'orthographic'). If None, uses standard 3d.
 
     Returns
     -------
@@ -83,7 +85,22 @@ def initialize_plot(
         if figsize is None:
             figsize = (10, 8)
         fig = plt.figure(figsize=figsize)
-        ax = fig.add_subplot(1, 1, 1, projection="3d")
+
+        # Support ccrs projections for 3D plots
+        ccrs_proj = kargs.get("ccrs_projection", None)
+        if ccrs_proj:
+            # Map string names to ccrs projection objects
+            projection_map = {
+                "platecarree": ccrs.PlateCarree(),
+                "mollweide": ccrs.Mollweide(),
+                "orthographic": ccrs.Orthographic(),
+                "mercator": ccrs.Mercator(),
+                "transversemercator": ccrs.TransverseMercator(),
+            }
+            ccrs_proj_obj = projection_map.get(ccrs_proj.lower(), ccrs.PlateCarree())
+            ax = fig.add_subplot(1, 1, 1, projection=ccrs_proj_obj)
+        else:
+            ax = fig.add_subplot(1, 1, 1, projection="3d")
     else:
         if figsize is None:
             figsize = (8, 14)
@@ -214,8 +231,15 @@ def animate_solution(
         - figsize : tuple[float, float] | None
             Figure size (width, height) in inches. If None, defaults to (8, 14).
         - dark_mode (bool): if True, use a dark plot background.
+        - mpl_rc_params (dict): dictionary of matplotlib rcParams to update before plotting.
     """
+    import matplotlib as mpl
     import matplotlib.animation as animation
+
+    # Apply custom matplotlib rcParams if provided
+    mpl_rc_params = kargs.get("mpl_rc_params", {})
+    if mpl_rc_params:
+        mpl.rcParams.update(mpl_rc_params)
 
     result = read_solutions(output_path, frames_list=frames)
     bathymetry = result["bathymetry"]
@@ -298,19 +322,7 @@ def animate_solution(
         # ax.tick_params(axis="x", colors="white")
         # ax.tick_params(axis="y", colors="white")
         # Update colorbars for the new contour and quiver plots
-
-        # Remove previous colorbars if they exist
-
-        # divider = make_axes_locatable(ax)
-        # cax1 = divider.new_horizontal(size="5%", pad=0.05, axes_class=plt.Axes)
-        # cax2 = divider.new_horizontal(size="5%", pad=0.65, axes_class=plt.Axes)
-        # print(cax1)
         assert contourf[0] is not None and quiver[0] is not None
-
-        # if colorbar1[0] is not None:
-        #     colorbar1[0].remove()
-        # if colorbar2[0] is not None:
-        #     colorbar2[0].remove()
 
         colorbar1[0] = fig.colorbar(
             contourf[0],
@@ -372,8 +384,17 @@ def animate_surface(
         - file_name (str): output filename (default: wave_surface_animation.mp4)
         - writer (str): animation writer backend (default: ffmpeg)
         - fps (int): output frame rate when saving (default: 30)
+        - mpl_rc_params (dict): dictionary of matplotlib rcParams to update before plotting.
+        - ccrs_projection (str): ccrs projection type for 3D axes
+            (e.g., 'platecarree', 'mollweide', 'orthographic'). If None, uses standard 3d.
     """
+    import matplotlib as mpl
     import matplotlib.animation as animation
+
+    # Apply custom matplotlib rcParams if provided
+    mpl_rc_params = kargs.get("mpl_rc_params", {})
+    if mpl_rc_params:
+        mpl.rcParams.update(mpl_rc_params)
 
     result = read_solutions(output_path, frames_list=frames)
     bathymetry = result["bathymetry"]
@@ -391,7 +412,7 @@ def animate_surface(
         **kargs,
     )
     ax = cast(Any, ax)
-    cax = fig.add_axes((0.88, 0.16, 0.03, 0.68))
+    cax = fig.add_axes((0.8, 0.16, 0.03, 0.68))
     fig.subplots_adjust(right=0.86)
 
     x_min, x_max = float(np.nanmin(X)), float(np.nanmax(X))

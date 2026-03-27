@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # encoding: utf-8
-"""Test for SWESolver class using the radial dam break example."""
+"""Example: Storm surge simulation for Biscayne Bay."""
 
 import logging
 
@@ -10,13 +10,13 @@ import numpy as np
 import tidalflow
 
 logger = tidalflow.logging_config.setup_logging(
-    logging.DEBUG,
+    logging.INFO,
     "biscayne_bay_example.log",
 )
 
 
-def test_radial_dam_break() -> None:
-    """Test SWESolver with radial dam break scenario."""
+def run_radial_dam_break_example() -> None:
+    """Example: Storm surge simulation using radial dam break scenario in Biscayne Bay."""
 
     # Configuration
 
@@ -32,8 +32,8 @@ def test_radial_dam_break() -> None:
         # Domain
         lon_range=lon_range,
         lat_range=lat_range,
-        nx=40,
-        ny=40,
+        nx=50,
+        ny=50,
         # Time
         t_final=1000.0,  # seconds
         dt=10.0,  # seconds
@@ -54,7 +54,7 @@ def test_radial_dam_break() -> None:
 
     # Providers
 
-    print("Creating data providers...")
+    logger.info("Creating data providers...")
 
     # Bathymetry from GEBCO NetCDF file
     bathymetry_provider = tidalflow.providers.BathymetryFromNC(
@@ -67,7 +67,7 @@ def test_radial_dam_break() -> None:
     alpha_lat = 0.6
     center_lon = alpha_lon * lon_range[0] + (1 - alpha_lon) * lon_range[1]
     center_lat = alpha_lat * lat_range[0] + (1 - alpha_lat) * lat_range[1]
-    print(f"Domain center (lon, lat): ({center_lon:.4f}, {center_lat:.4f})")
+    logger.info(f"Domain center (lon, lat): ({center_lon:.4f}, {center_lat:.4f})")
     initial_condition_provider = tidalflow.providers.GaussianHumpInitialCondition(
         height=3,  # meters
         width=10000,  # controls spread in coordinate space (roughly 1 degree ~ 111111 m,
@@ -77,65 +77,95 @@ def test_radial_dam_break() -> None:
 
     # Solver setup
 
-    print("Initializing SWESolver...")
+    logger.info("Initializing SWESolver...")
     solver = tidalflow.solver.SWESolver(
         config=config,
         bathymetry_provider=bathymetry_provider,
         ic_provider=initial_condition_provider,
     )
 
-    print(f"Config:\n {config}")
+    logger.info(f"Configuration:\n{solver.config}")
 
     # Initialize data from providers
 
-    print("Initializing data from providers...")
+    logger.info("Initializing data from providers...")
     solver.initialize_data_from_providers()
-    print(
-        f"Bathymetry: min={solver.bathymetry_array.min():.2f}m, "
-        f"max={solver.bathymetry_array.max():.2f}m"
+    logger.info(
+        f"Bathymetry: {solver.bathymetry_array.min():.2f}m "
+        f"to {solver.bathymetry_array.max():.2f}m"
     )
-    print(
-        f"Initial water depth: min={solver.initial_condition_array[0].min():.2f}m, "
-        f"max={solver.initial_condition_array[0].max():.2f}m"
+    logger.info(
+        f"Initial water depth: {solver.initial_condition_array[0].min():.2f}m "
+        f"to {solver.initial_condition_array[0].max():.2f}m"
     )
-
-    print(f"Boundary conditions: lower={config.bc_lower}, upper={config.bc_upper}")
 
     # Set wind forcing (direct values, not provider)
 
-    print(f"Setting wind forcing: u={u_wind:.2f} m/s, v={v_wind:.2f} m/s")
+    logger.info(f"Setting wind forcing: u={u_wind:.2f} m/s, v={v_wind:.2f} m/s")
     solver.set_constant_wind_forcing(u_wind=u_wind, v_wind=v_wind)
 
     # Run simulation
 
-    print("Setting up solver...")
+    logger.info("Setting up solver...")
     solver.setup_solver()
 
-    print("Running simulation...")
+    logger.info("Running simulation...")
     result = solver.solve()
     assert result.solution is not None
 
-    print(
-        f"\nSimulation complete! solution tensor (T+1, 3, nx, ny): {result.solution.shape}"
-    )
+    logger.info(f"Simulation complete!")
+    logger.info(f"Solution shape: {result.solution.shape}")
+    logger.info(f"Number of output frames: {len(result.solution)}")
 
-    # Visualize results (only on rank 0 for MPI)
+    # Visualize results
 
     if solver.rank == 0 and solver.config.output_dir is not None:
+        logger.info("Animating results...")
+        mpl_rc_params = {
+            "text.usetex": False,
+            "font.family": "sans-serif",
+            "font.sans-serif": ["Google Sans", "DejaVu Sans"],
+        }
+        frames = None  # All frames
+        wave_threshold = 1e-2
+        interval = 50
+        save = True
+        dark_mode = True
+        file_name_surface = "biscayne_bay.gif"
+        file_name_velocity = "biscayne_bay_velocity.gif"
+        writer = "pillow"
+        figsize_surface = (8, 6)
+        figsize_velocity = (8, 8)
+
+        tidalflow.utils.visualization.animate_surface(
+            output_path=solver.config.output_dir,
+            frames=frames,  # All frames
+            wave_treshold=wave_threshold,
+            interval=interval,
+            save=save,
+            dark_mode=dark_mode,
+            file_name=file_name_surface,
+            writer=writer,
+            figsize=figsize_surface,
+            mpl_rc_params=mpl_rc_params,
+        )
         tidalflow.utils.visualization.animate_solution(
             output_path=solver.config.output_dir,
-            frames=None,  # It means all frames
-            wave_treshold=1e-2,
-            save=False,
-            dark_mode=True,
-            writer="pillow",
-            file_name="biscayne_bay.gif",
-            fps=25,
+            frames=frames,  # All frames
+            wave_treshold=wave_threshold,
+            interval=interval,
+            save=save,
+            dark_mode=dark_mode,
+            file_name=file_name_velocity,
+            writer=writer,
+            figsize=figsize_velocity,
+            mpl_rc_params=mpl_rc_params,
+            arrow_step=2,
         )
-        print("\nVisualization complete!")
+        logger.info("Visualization complete!")
 
-    print("\nTest completed successfully!")
+    logger.info("Example completed successfully!")
 
 
 if __name__ == "__main__":
-    test_radial_dam_break()
+    run_radial_dam_break_example()
