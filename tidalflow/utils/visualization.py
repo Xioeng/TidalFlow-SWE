@@ -15,15 +15,29 @@ logger = get_logger(__name__)
 
 
 def normalize_velocities_for_plotting(
-    v_x: np.ndarray, v_y: np.ndarray, max_arrow_length: float
+    v_x: np.ndarray, v_y: np.ndarray, max_arrow_length: float, length_scale: float = 1.0
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Normalize velocity vectors to limit maximum arrow length."""
+    """Normalize velocity vectors to limit maximum arrow length.
+
+    Uses tanh scaling to cap large values while keeping arrows near the mean
+    at reasonable sizes. All arrows scale to [0, max_arrow_length].
+    """
     velocity_magnitude = np.sqrt(v_x**2 + v_y**2)
-    scale = np.ones_like(velocity_magnitude)
-    mask = velocity_magnitude > max_arrow_length
-    scale[mask] = max_arrow_length / velocity_magnitude[mask]
+    mean = velocity_magnitude.mean()
+
+    # Normalize by mean and apply tanh to compress outliers
+    # tanh(velocity/mean) maps: 0→0, 1→0.76, 2→0.96, ∞→1
+    # This caps maximum arrow length while keeping mean-sized arrows reasonable
+    normalized_mag = np.tanh(velocity_magnitude / mean)
+    scaled_mag = normalized_mag * max_arrow_length * length_scale
+
+    # Scale velocity components proportionally to maintain direction
+    with np.errstate(divide="ignore", invalid="ignore"):
+        scale = np.where(velocity_magnitude > 0, scaled_mag / velocity_magnitude, 0)
+
     v_x_scaled = v_x * scale
     v_y_scaled = v_y * scale
+
     return v_x_scaled, v_y_scaled
 
 
@@ -38,13 +52,21 @@ def initialize_plot(
     ----------
     output_path : str
         Path to the Clawpack output directory.
+    projection : str
+        Projection type: 'map' or '3d' (default: 'map').
+    **kargs : dict
+        Additional keyword arguments including:
+        - figsize : tuple[int, int] | None
+            Figure size (width, height) in inches. If None, uses default:
+            (10, 8) for 3d projection, (8, 14) for map projection.
+        - dark_mode : bool
+            Whether to use dark background style.
 
     Returns
     -------
     tuple[plt.Figure, plt.Axes]
         Matplotlib figure and axes objects.
     """
-
     result = SWEResult().load(os.path.join(output_path, "result.pkl"))
     X_raw, Y_raw = result.meshgrid_coord
     X = np.asarray(X_raw)
@@ -55,11 +77,17 @@ def initialize_plot(
     if kargs.get("dark_mode", False):
         plt.style.use("dark_background")
 
+    figsize = kargs.get("figsize", None)
+
     if projection == "3d":
-        fig = plt.figure(figsize=(10, 8))
+        if figsize is None:
+            figsize = (10, 8)
+        fig = plt.figure(figsize=figsize)
         ax = fig.add_subplot(1, 1, 1, projection="3d")
     else:
-        fig = plt.figure(figsize=(8, 14))
+        if figsize is None:
+            figsize = (8, 14)
+        fig = plt.figure(figsize=figsize)
         ax = fig.add_subplot(1, 1, 1, projection=ccrs.PlateCarree())
         ax.set_extent([X.min(), X.max(), Y.min(), Y.max()], crs=ccrs.PlateCarree())
         # Add satellite imagery using Google Maps tiles
@@ -73,7 +101,11 @@ def initialize_plot(
     return fig, ax
 
 
-def plot_solution(output_path: str, frame: int = 0, **kargs) -> None:
+def plot_solution(
+    output_path: str,
+    frame: int = 0,
+    **kargs,
+) -> None:
     """Plot the solution at a given frame from Clawpack output.
 
     Parameters
@@ -82,7 +114,12 @@ def plot_solution(output_path: str, frame: int = 0, **kargs) -> None:
         Path to the Clawpack output directory.
     frame : int
         Frame number to plot.
+    **kargs : dict
+        Additional keyword arguments including:
+        - figsize : tuple[float, float] | None
+            Figure size (width, height) in inches. If None, defaults to (8, 14).
     """
+    figsize = kargs.get("figsize", None)
 
     result = read_solutions(output_path, frames_list=[frame])
     bathymetry = result["bathymetry"]
@@ -99,13 +136,14 @@ def plot_solution(output_path: str, frame: int = 0, **kargs) -> None:
     v_y[h <= wave_treshold] = 0.0
 
     max_arrow_length = kargs.get("max_arrow_length", 0.5)
+    length_scale = kargs.get("length_scale", 1.0)
     v_x_scaled, v_y_scaled = normalize_velocities_for_plotting(
-        v_x, v_y, max_arrow_length
+        v_x, v_y, max_arrow_length, length_scale
     )
 
     velocity = np.sqrt(v_x**2 + v_y**2)
     plt.style.use("dark_background")
-    h_fig = plt.figure(figsize=(8, 14))
+    h_fig = plt.figure(figsize=figsize)
     # Add a satellital image using cartopy's Stamen imagery
     h_ax = h_fig.add_subplot(1, 1, 1, projection=ccrs.PlateCarree())
     h_ax.set_extent([X.min(), X.max(), Y.min(), Y.max()], crs=ccrs.PlateCarree())
@@ -121,12 +159,13 @@ def plot_solution(output_path: str, frame: int = 0, **kargs) -> None:
     contour = h_ax.contourf(
         X, Y, bathymetry, levels=50, cmap="viridis", alpha=0.7
     )  # perceptually uniform, good for scalar fields
+    arrow_step = kargs.get("arrow_step", 2)  # show every nth arrow
     velocity_field = h_ax.quiver(
-        X,
-        Y,
-        v_x_scaled,
-        v_y_scaled,
-        velocity,
+        X[::arrow_step, ::arrow_step],
+        Y[::arrow_step, ::arrow_step],
+        v_x_scaled[::arrow_step, ::arrow_step],
+        v_y_scaled[::arrow_step, ::arrow_step],
+        velocity[::arrow_step, ::arrow_step],
         angles="xy",
         cmap="cool",  # sequential, high contrast, visually distinct from 'viridis'
         width=0.005,  # make arrows wider (default is ~0.002)
@@ -172,6 +211,8 @@ def animate_solution(
     **kargs : dict
         Additional keyword arguments for plotting.
         Supported options include:
+        - figsize : tuple[float, float] | None
+            Figure size (width, height) in inches. If None, defaults to (8, 14).
         - dark_mode (bool): if True, use a dark plot background.
     """
     import matplotlib.animation as animation
@@ -180,8 +221,7 @@ def animate_solution(
     bathymetry = result["bathymetry"]
     X, Y = result["meshgrid"]
     solutions = result["solutions"]
-    dark_mode = bool(kargs.get("dark_mode", False))
-    fig, ax = initialize_plot(output_path, dark_mode=dark_mode)
+    fig, ax = initialize_plot(output_path, **kargs)
     ax = cast(Any, ax)
 
     wave_treshold = kargs.get("wave_treshold", 1e-2)
@@ -220,8 +260,9 @@ def animate_solution(
         v_x, v_y = sol[1, :, :] / h_div, sol[2, :, :] / h_div
         v_x[h <= wave_treshold] = 0.0
         v_y[h <= wave_treshold] = 0.0
+        length_scale = kargs.get("length_scale", 1.0)
         v_x_scaled, v_y_scaled = normalize_velocities_for_plotting(
-            v_x, v_y, max_arrow_length
+            v_x, v_y, max_arrow_length, length_scale
         )
         velocity = np.sqrt(v_x**2 + v_y**2)
 
@@ -230,12 +271,13 @@ def animate_solution(
         )
         v_x_scaled[mask] = np.nan
         v_y_scaled[mask] = np.nan
+        arrow_step = kargs.get("arrow_step", 2)  # show every nth arrow
         quiver[0] = ax.quiver(
-            X,
-            Y,
-            v_x_scaled,
-            v_y_scaled,
-            velocity,
+            X[::arrow_step, ::arrow_step],
+            Y[::arrow_step, ::arrow_step],
+            v_x_scaled[::arrow_step, ::arrow_step],
+            v_y_scaled[::arrow_step, ::arrow_step],
+            velocity[::arrow_step, ::arrow_step],
             angles="xy",
             cmap="cool",
             width=0.005,
@@ -319,6 +361,8 @@ def animate_surface(
     **kargs : dict
         Additional keyword arguments for plotting/export.
         Supported options include:
+        - figsize : tuple[float, float] | None
+            Figure size (width, height) in inches. If None, defaults to (10, 8).
         - wave_treshold (float): mask threshold for wet cells (default: 1e-3)
         - interval (int): animation interval in ms (default: 50)
         - elev (float): camera elevation in degrees (default: 30.0)
@@ -344,7 +388,7 @@ def animate_surface(
     fig, ax = initialize_plot(
         output_path,
         projection="3d",
-        dark_mode=dark_mode,
+        **kargs,
     )
     ax = cast(Any, ax)
     cax = fig.add_axes((0.88, 0.16, 0.03, 0.68))

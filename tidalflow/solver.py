@@ -4,7 +4,7 @@
 import os
 from typing import cast
 
-import clawpack.pyclaw as pyclaw
+import clawpack.petclaw as pyclaw
 import numpy as np
 import numpy.typing as npt
 from clawpack import riemann
